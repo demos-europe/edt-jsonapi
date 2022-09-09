@@ -4,12 +4,9 @@ declare(strict_types=1);
 
 namespace EDT\JsonApi\RequestHandling;
 
-use EDT\Apization\SortingParsers\JsonApiSortingParser;
 use EDT\JsonApi\ResourceTypes\ResourceTypeInterface;
 use EDT\JsonApi\Schema\ContentField;
 use EDT\Querying\ConditionParsers\Drupal\DrupalFilterException;
-use EDT\Querying\ConditionParsers\Drupal\DrupalFilterParser;
-use EDT\Querying\Contracts\FunctionInterface;
 use EDT\Querying\Contracts\SortMethodInterface;
 use EDT\Wrapping\Contracts\AccessException;
 use EDT\Wrapping\Contracts\TypeProviderInterface;
@@ -20,14 +17,10 @@ use InvalidArgumentException;
 use League\Fractal\Resource\Collection;
 use League\Fractal\Resource\Item;
 use Symfony\Component\HttpFoundation\ParameterBag;
-use Symfony\Component\Validator\Constraint;
-use Symfony\Component\Validator\Constraints as Assert;
-use Symfony\Component\Validator\Exception\ValidationFailedException;
-use Symfony\Component\Validator\Validator\ValidatorInterface;
 use function array_key_exists;
 
 /**
- * @template F of FunctionInterface<bool>;
+ * @template F of \EDT\Querying\Contracts\FunctionInterface<bool>
  * @psalm-type JsonApiRelationship = array{type: string, id: string}
  * @psalm-type JsonApiRelationships = array<string,array{data: array<int, JsonApiRelationship>|JsonApiRelationship|null}>
  */
@@ -44,7 +37,7 @@ abstract class AbstractApiService
     protected $typeProvider;
 
     /**
-     * @var DrupalFilterParser<F>
+     * @var FilterParserInterface<mixed, F>
      */
     private $filterParser;
 
@@ -54,37 +47,24 @@ abstract class AbstractApiService
     private $sortingParser;
 
     /**
-     * @var array<int, Constraint>
-     */
-    private $filterSchemaConstraints;
-
-    /**
-     * @var ValidatorInterface
-     */
-    private $validator;
-
-    /**
      * @var PaginatorFactory
      */
     private $paginatorFactory;
 
     /**
-     * @param DrupalFilterParser<F> $filterParser
+     * @param FilterParserInterface<mixed, F> $filterParser
      */
     public function __construct(
-        DrupalFilterParser $filterParser,
+        FilterParserInterface $filterParser,
         JsonApiSortingParser $sortingParser,
         PaginatorFactory $paginatorFactory,
         PropertyValuesGenerator $propertyValuesGenerator,
-        TypeProviderInterface $typeProvider,
-        ValidatorInterface $validator
+        TypeProviderInterface $typeProvider
     ) {
         $this->propertyValuesGenerator = $propertyValuesGenerator;
         $this->typeProvider = $typeProvider;
         $this->filterParser = $filterParser;
         $this->sortingParser = $sortingParser;
-        $this->filterSchemaConstraints = $this->getFilterConstraints();
-        $this->validator = $validator;
         $this->paginatorFactory = $paginatorFactory;
     }
 
@@ -109,10 +89,10 @@ abstract class AbstractApiService
             ResourceTypeInterface::class
         );
 
-        $filter = $this->getFilter($urlParams);
+        $filters = $this->getFilters($urlParams);
         $sortMethods = $this->getSorting($urlParams);
 
-        $apiList = $this->getObjects($type, $filter, $sortMethods, $urlParams);
+        $apiList = $this->getObjects($type, $filters, $sortMethods, $urlParams);
 
         $transformer = $type->getTransformer();
         $collection = new Collection($apiList->getList(), $transformer, $type::getName());
@@ -245,14 +225,14 @@ abstract class AbstractApiService
      * @template O of object
      *
      * @param ResourceTypeInterface<O>        $type
-     * @param F                               $filter
+     * @param array<int, F>                   $filters
      * @param array<int, SortMethodInterface> $sortMethods
      *
      * @return ApiListResultInterface<O>
      */
     abstract protected function getObjects(
         ResourceTypeInterface $type,
-        FunctionInterface $filter,
+        array $filters,
         array $sortMethods,
         ParameterBag $urlParams
     ): ApiListResultInterface;
@@ -279,25 +259,21 @@ abstract class AbstractApiService
     abstract protected function deleteObject(ResourceTypeInterface $type, string $id): void;
 
     /**
-     * @return F
+     * @return array<int, F>
      *
      * @throws DrupalFilterException
      */
-    protected function getFilter(ParameterBag $query): FunctionInterface
+    protected function getFilters(ParameterBag $query): array
     {
-        $filterParam = $query->get(UrlParameter::FILTER);
-        $filterViolations = $this->validator->validate($filterParam, $this->filterSchemaConstraints);
-        if (0 !== $filterViolations->count()) {
-            throw new DrupalFilterException(
-                'Schema validation of filter data failed.',
-                0,
-                new ValidationFailedException($filterParam, $filterViolations)
-            );
+        if (!$query->has(UrlParameter::FILTER)) {
+            return [];
         }
 
+        $filterParam = $query->get(UrlParameter::FILTER);
+        $conditions = $this->filterParser->parseFilter($filterParam);
         $query->remove(UrlParameter::FILTER);
 
-        return $this->filterParser->createRootFromArray($filterParam);
+        return $conditions;
     }
 
     /**
@@ -309,96 +285,5 @@ abstract class AbstractApiService
         $query->remove(UrlParameter::SORT);
 
         return $this->sortingParser->createFromQueryParamValue($sort);
-    }
-
-    /**
-     * @return array<int, Constraint>
-     */
-    private function getFilterConstraints(): array
-    {
-        $stringConstraint = new Assert\Type('string');
-        $arrayConstraint = new Assert\Type('array');
-        $conjunctionConstraint = new Assert\Choice(['AND', 'OR']);
-        $conditionConstraints = [
-            $arrayConstraint,
-            new Assert\Collection(
-                [
-                    'value'    => null,
-                    'memberOf' => $stringConstraint,
-                    'path'     => $stringConstraint,
-                    'operator' => new Assert\Choice([
-                        '=',
-                        '<>',
-                        'STRING_CONTAINS_CASE_INSENSITIVE',
-                        'IN',
-                        'NOT_IN',
-                        'BETWEEN',
-                        'NOT_BETWEEN',
-                        'ARRAY_CONTAINS_VALUE',
-                        'IS NULL',
-                        'IS NOT NULL',
-                        '>',
-                        '>=',
-                        '<',
-                        '<=',
-                        'STARTS_WITH_CASE_INSENSITIVE',
-                        'ENDS_WITH_CASE_INSENSITIVE',
-                    ]),
-                ],
-                null,
-                null,
-                false,
-                true
-            ),
-            new Assert\Collection(
-                [
-                    'path' => $stringConstraint,
-                ],
-                null,
-                null,
-                true,
-                false
-            ),
-        ];
-        $groupConstraints = [
-            $arrayConstraint,
-            new Assert\Collection(
-                [
-                    'memberOf'    => $stringConstraint,
-                    'conjunction' => $conjunctionConstraint,
-                ],
-                null,
-                null,
-                false,
-                true
-            ),
-            new Assert\Collection(
-                [
-                    'conjunction' => $conjunctionConstraint,
-                ],
-                null,
-                null,
-                true,
-                false
-            ),
-        ];
-
-        return [
-            $arrayConstraint,
-            new Assert\All([
-                $arrayConstraint,
-                new Assert\Count(1),
-                new Assert\Collection(
-                    [
-                        'condition' => $conditionConstraints,
-                        'group'     => $groupConstraints,
-                    ],
-                    null,
-                    null,
-                    false,
-                    true
-                ),
-            ]),
-        ];
     }
 }
