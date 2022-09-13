@@ -195,7 +195,6 @@ class DynamicTransformer extends TransformerAbstract
      * the default Fractal behavior to silently not include them, because the page will not work
      * and with the log message the cause is way more clear.
      *
-     * @return mixed|array
      * @throws ExcludeException
      */
     public function processIncludedResources(Scope $scope, $data)
@@ -269,7 +268,7 @@ class DynamicTransformer extends TransformerAbstract
     }
 
     /**
-     * @param array<int, string> $notAvailableIncludes
+     * @param list<string> $notAvailableIncludes
      */
     private function createIncludeErrorMessage(array $notAvailableIncludes): string
     {
@@ -289,7 +288,7 @@ class DynamicTransformer extends TransformerAbstract
     /**
      * Wraps each given property into quotes and concatenates them with a comma.
      *
-     * @param array<int, string> $properties
+     * @param list<string> $properties
      */
     private function propertiesToString(array $properties): string
     {

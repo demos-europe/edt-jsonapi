@@ -7,7 +7,6 @@ namespace EDT\JsonApi\RequestHandling;
 use EDT\JsonApi\ResourceTypes\ResourceTypeInterface;
 use EDT\JsonApi\Schema\ContentField;
 use EDT\Querying\ConditionParsers\Drupal\DrupalFilterException;
-use EDT\Querying\Contracts\SortMethodInterface;
 use EDT\Wrapping\Contracts\AccessException;
 use EDT\Wrapping\Contracts\TypeProviderInterface;
 use EDT\Wrapping\Contracts\Types\CreatableTypeInterface;
@@ -20,29 +19,31 @@ use Symfony\Component\HttpFoundation\ParameterBag;
 use function array_key_exists;
 
 /**
- * @template F of \EDT\Querying\Contracts\FunctionInterface<bool>
- * @psalm-type JsonApiRelationship = array{type: string, id: string}
- * @psalm-type JsonApiRelationships = array<string,array{data: array<int, JsonApiRelationship>|JsonApiRelationship|null}>
+ * @template C of \EDT\Querying\Contracts\FunctionInterface<bool>
+ * @template S of \EDT\Querying\Contracts\PathsBasedInterface
+ *
+ * @psalm-type JsonApiRelationship = array{type: non-empty-string, id: non-empty-string}
+ * @psalm-type JsonApiRelationships = array<non-empty-string,array{data: list<JsonApiRelationship>|JsonApiRelationship|null}>
  */
 abstract class AbstractApiService
 {
     /**
-     * @var PropertyValuesGenerator
+     * @var PropertyValuesGenerator<C, S>
      */
     protected $propertyValuesGenerator;
 
     /**
-     * @var TypeProviderInterface
+     * @var TypeProviderInterface<C, S>
      */
     protected $typeProvider;
 
     /**
-     * @var FilterParserInterface<mixed, F>
+     * @var FilterParserInterface<mixed, C>
      */
     private $filterParser;
 
     /**
-     * @var JsonApiSortingParser
+     * @var JsonApiSortingParser<S>
      */
     private $sortingParser;
 
@@ -52,7 +53,10 @@ abstract class AbstractApiService
     private $paginatorFactory;
 
     /**
-     * @param FilterParserInterface<mixed, F> $filterParser
+     * @param FilterParserInterface<mixed, C> $filterParser
+     * @param JsonApiSortingParser<S>         $sortingParser
+     * @param PropertyValuesGenerator<C, S>   $propertyValuesGenerator
+     * @param TypeProviderInterface<C, S>     $typeProvider
      */
     public function __construct(
         FilterParserInterface $filterParser,
@@ -68,8 +72,13 @@ abstract class AbstractApiService
         $this->paginatorFactory = $paginatorFactory;
     }
 
+    /**
+     * @param non-empty-string $urlTypeName
+     * @param non-empty-string $urlId
+     */
     public function getFromRequest(string $urlTypeName, string $urlId): Item
     {
+        /** @var ResourceTypeInterface $type */
         $type = $this->typeProvider->getAvailableType(
             $urlTypeName,
             ResourceTypeInterface::class
@@ -80,6 +89,8 @@ abstract class AbstractApiService
     }
 
     /**
+     * @param non-empty-string $typeName
+     *
      * @throws DrupalFilterException
      */
     public function listFromRequest(string $typeName, ParameterBag $urlParams): Collection
@@ -106,22 +117,20 @@ abstract class AbstractApiService
     }
 
     /**
-     * @param array{data: array{type: string, id: string, attributes?: array<string,mixed>, relationships?: JsonApiRelationships}} $requestBody
+     * @param non-empty-string $urlTypeName
+     * @param non-empty-string $urlId
+     * @param array{data: array{type: non-empty-string, id: non-empty-string, attributes?: array<non-empty-string,mixed>, relationships?: JsonApiRelationships}} $requestBody
      *
      * @throws Exception
      */
     // TODO: add proper format validation
     public function updateFromRequest(string $urlTypeName, string $urlId, array $requestBody): ?Item
     {
-        if ('' === $urlTypeName || '' === $urlId) {
-            throw new InvalidArgumentException('Invalid update request. Resource ID and type defined in URL must be non-empty strings.');
-        }
-
         // "The PATCH request MUST include a single resource object as primary data."
-        $data = $requestBody[ContentField::DATA] ?? [];
+        $data = $requestBody[ContentField::DATA];
         // "The resource object MUST contain type and id members."
-        $bodyId = $data[ContentField::ID] ?? '';
-        $bodyTypeName = $data[ContentField::TYPE] ?? '';
+        $bodyId = $data[ContentField::ID];
+        $bodyTypeName = $data[ContentField::TYPE];
 
         $bodyTypeName = $this->normalizeTypeName($bodyTypeName);
         if ($bodyId !== $urlId || $bodyTypeName !== $urlTypeName) {
@@ -147,8 +156,15 @@ abstract class AbstractApiService
         return new Item($updatedEntity, $type->getTransformer(), $type::getName());
     }
 
+    /**
+     * @param non-empty-string $urlTypeName
+     * @param non-empty-string $urlId
+     *
+     * @throws Exception
+     */
     public function deleteFromRequest(string $urlTypeName, string $urlId): void
     {
+        /** @var ResourceTypeInterface $type */
         $type = $this->typeProvider->getAvailableType(
             $urlTypeName,
             ResourceTypeInterface::class
@@ -160,6 +176,7 @@ abstract class AbstractApiService
     // TODO: add proper format validation
 
     /**
+     * @param non-empty-string $urlTypeName
      * @param array{data: array{type: string, id: string, attributes?: array<string,mixed>, relationships?: JsonApiRelationships}} $requestBody
      *
      * @throws Exception
@@ -200,7 +217,8 @@ abstract class AbstractApiService
     /**
      * @template O of object
      *
-     * @param ResourceTypeInterface<O> $type
+     * @param ResourceTypeInterface<C, S, O> $type
+     * @param non-empty-string               $id
      *
      * @return O
      */
@@ -209,8 +227,8 @@ abstract class AbstractApiService
     /**
      * @template O of object
      *
-     * @param ResourceTypeInterface<O> $type
-     * @param array<string, mixed>     $properties
+     * @param ResourceTypeInterface<C, S, O> $type
+     * @param array<non-empty-string, mixed> $properties
      *
      * @return O|null The created object if the creation had side effects on it (values set in
      *                the object beside the ones specified by the given $properties). `null`,
@@ -224,9 +242,9 @@ abstract class AbstractApiService
     /**
      * @template O of object
      *
-     * @param ResourceTypeInterface<O>        $type
-     * @param array<int, F>                   $filters
-     * @param array<int, SortMethodInterface> $sortMethods
+     * @param ResourceTypeInterface<C, S, O> $type
+     * @param list<C>                        $filters
+     * @param list<S>                        $sortMethods
      *
      * @return ApiListResultInterface<O>
      */
@@ -237,13 +255,19 @@ abstract class AbstractApiService
         ParameterBag $urlParams
     ): ApiListResultInterface;
 
+    /**
+     * @param non-empty-string $typeName
+     *
+     * @return non-empty-string
+     */
     abstract protected function normalizeTypeName(string $typeName): string;
 
     /**
      * @template O of object
      *
-     * @param ResourceTypeInterface<O> $type
-     * @param array<string, mixed>     $properties
+     * @param ResourceTypeInterface<C, S, O> $type
+     * @param non-empty-string               $id
+     * @param array<non-empty-string, mixed> $properties
      *
      * @return O|null The updated object if the update had side effects on it (changes to the
      *                object beside the ones specified by the given $properties). `null` otherwise.
@@ -254,12 +278,15 @@ abstract class AbstractApiService
     abstract protected function updateObject(ResourceTypeInterface $type, string $id, array $properties): ?object;
 
     /**
+     * @param ResourceTypeInterface<C, S, object> $type
+     * @param non-empty-string                    $id
+     *
      * @throws Exception
      */
     abstract protected function deleteObject(ResourceTypeInterface $type, string $id): void;
 
     /**
-     * @return array<int, F>
+     * @return list<C>
      *
      * @throws DrupalFilterException
      */
@@ -277,7 +304,7 @@ abstract class AbstractApiService
     }
 
     /**
-     * @return array<int,SortMethodInterface>
+     * @return list<S>
      */
     protected function getSorting(ParameterBag $query): array
     {

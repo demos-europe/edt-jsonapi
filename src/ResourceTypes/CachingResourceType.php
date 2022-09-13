@@ -5,26 +5,28 @@ declare(strict_types=1);
 namespace EDT\JsonApi\ResourceTypes;
 
 /**
+ * @template C of \EDT\Querying\Contracts\PathsBasedInterface
+ * @template S of \EDT\Querying\Contracts\PathsBasedInterface
  * @template T of object
  *
- * @template-extends AbstractResourceType<T>
+ * @template-extends AbstractResourceType<C, S, T>
  */
 abstract class CachingResourceType extends AbstractResourceType
 {
     /**
-     * @var array<string,non-empty-array<int,string>>|null
+     * @var array<non-empty-string,non-empty-list<non-empty-string>>|null
      */
     protected $aliasesCache;
     /**
-     * @var array<string,string|null>|null
+     * @var array<non-empty-string, non-empty-string|null>|null
      */
     protected $filterablePropertiesCache;
     /**
-     * @var array<string,string|null>|null
+     * @var array<non-empty-string, non-empty-string|null>|null
      */
     protected $readablePropertiesCache;
     /**
-     * @var array<string,string|null>|null
+     * @var array<non-empty-string, non-empty-string|null>|null
      */
     protected $sortablePropertiesCache;
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace EDT\JsonApi\OutputTransformation;
 
 use EDT\JsonApi\ResourceTypes\ResourceTypeInterface;
+use EDT\Querying\Contracts\PathsBasedInterface;
 use EDT\Querying\Utilities\Iterables;
 use EDT\Wrapping\WrapperFactories\WrapperObject;
 use League\Fractal\ParamBag;
@@ -21,21 +22,21 @@ use League\Fractal\TransformerAbstract;
 class IncludeDefinition implements IncludeDefinitionInterface
 {
     /**
-     * @var PropertyDefinitionInterface<O, WrapperObject<T>|array<int, WrapperObject<T>>|null>
+     * @var PropertyDefinitionInterface<O, WrapperObject<T>|list<WrapperObject<T>>|null>
      */
     private $propertyDefinition;
 
     /**
-     * @var ResourceTypeInterface<T>
+     * @var ResourceTypeInterface<PathsBasedInterface, PathsBasedInterface, T>
      */
     private $targetType;
 
     /**
-     * @param PropertyDefinition<O, WrapperObject<T>|array<int, WrapperObject<T>>|null> $propertyDefinition
-     * @param ResourceTypeInterface<T>                                                  $targetType
+     * @param PropertyDefinitionInterface<O, WrapperObject<T>|list<WrapperObject<T>>|null> $propertyDefinition
+     * @param ResourceTypeInterface<PathsBasedInterface, PathsBasedInterface, T>           $targetType
      */
     public function __construct(
-        PropertyDefinition $propertyDefinition,
+        PropertyDefinitionInterface $propertyDefinition,
         ResourceTypeInterface $targetType
     ) {
         $this->propertyDefinition = $propertyDefinition;

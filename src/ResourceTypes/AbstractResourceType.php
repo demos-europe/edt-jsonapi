@@ -4,86 +4,77 @@ declare(strict_types=1);
 
 namespace EDT\JsonApi\ResourceTypes;
 
-use Closure;
-use EDT\Querying\Utilities\Iterables;
+use EDT\JsonApi\OutputTransformation\TransformerObjectWrapper;
+use EDT\Querying\Contracts\PathsBasedInterface;
+use EDT\Wrapping\Contracts\Types\ReadableTypeInterface;
 use EDT\Wrapping\WrapperFactories\WrapperObject;
+use function array_key_exists;
 use function collect;
 use EDT\JsonApi\OutputTransformation\DynamicTransformer;
 use EDT\JsonApi\OutputTransformation\IncludeDefinition;
 use EDT\JsonApi\OutputTransformation\PropertyDefinition;
 use EDT\Querying\Contracts\PropertyPathInterface;
 use EDT\Wrapping\Contracts\Types\CreatableTypeInterface;
-use EDT\Wrapping\Contracts\Types\ReadableTypeInterface;
 use EDT\Wrapping\Contracts\Types\TypeInterface;
 use EDT\Wrapping\Contracts\WrapperFactoryInterface;
 use EDT\Wrapping\Utilities\TypeAccessor;
 use InvalidArgumentException;
-use League\Fractal\ParamBag;
 use League\Fractal\TransformerAbstract;
 use Psr\Log\LoggerInterface;
+use function get_class;
 
 /**
+ * @template C of \EDT\Querying\Contracts\PathsBasedInterface
+ * @template S of \EDT\Querying\Contracts\PathsBasedInterface
  * @template T of object
  *
- * @template-implements ResourceTypeInterface<T>
+ * @template-implements ResourceTypeInterface<C, S, T>
  */
 abstract class AbstractResourceType implements ResourceTypeInterface
 {
     public function getReadableProperties(): array
     {
-        return collect($this->getValidatedProperties())
-            ->filter(
-                static function (GetableProperty $property): bool {
-                    return $property->isReadable();
-                }
-            )
-            ->mapWithKeys(Closure::fromCallable([self::class, 'convertToNameAndTargetMapping']))
-            ->all();
+        $properties = $this->getValidatedProperties();
+        $properties = array_filter($properties, [self::class, 'isReadable']);
+        $properties = array_map([self::class, 'convertToNameAndTargetMapping'], $properties);
+
+        return array_merge([], ...$properties);
     }
 
     public function getFilterableProperties(): array
     {
-        return collect($this->getValidatedProperties())
-            ->filter(
-                static function (GetableProperty $property): bool {
-                    return $property->isFilterable();
-                }
-            )
-            ->mapWithKeys(Closure::fromCallable([self::class, 'convertToNameAndTargetMapping']))
-            ->all();
+        $properties = $this->getValidatedProperties();
+        $properties = array_filter($properties, [self::class, 'isFilterable']);
+        $properties = array_map([self::class, 'convertToNameAndTargetMapping'], $properties);
+
+        return array_merge([], ...$properties);
     }
 
     public function getSortableProperties(): array
     {
-        return collect($this->getValidatedProperties())
-            ->filter(
-                static function (GetableProperty $property): bool {
-                    return $property->isSortable();
-                }
-            )
-            ->mapWithKeys(Closure::fromCallable([self::class, 'convertToNameAndTargetMapping']))
-            ->all();
+        $properties = $this->getValidatedProperties();
+        $properties = array_filter($properties, [self::class, 'isSortable']);
+        $properties = array_map([self::class, 'convertToNameAndTargetMapping'], $properties);
+
+        return array_merge([], ...$properties);
     }
 
     /**
-     * @return array<string,null>
+     * @return array<non-empty-string, null>
      *
      * @see CreatableTypeInterface::getInitializableProperties()
      */
     public function getInitializableProperties(): array
     {
-        return collect($this->getValidatedProperties())
-            ->filter(static function (GetableProperty $property): bool {
-                return $property->isInitializable();
-            })
-            ->mapWithKeys(static function (GetableProperty $property): array {
-                return [$property->getName() => null];
-            })
-            ->all();
+        $properties = $this->getValidatedProperties();
+        $properties = array_filter($properties, [self::class, 'isInitializable']);
+        $properties = array_map([self::class, 'getPropertyName'], $properties);
+
+        return array_fill_keys($properties, null);
     }
 
     /**
-     * @return array<int, string>
+     * @return list<non-empty-string>
      */
     public function getPropertiesRequiredForCreation(): array
     {
@@ -99,18 +90,22 @@ abstract class AbstractResourceType implements ResourceTypeInterface
 
     public function getAliases(): array
     {
-        return collect($this->getValidatedProperties())
-            ->mapWithKeys(
-                static function (GetableProperty $property): array {
-                    return [$property->getName() => $property->getAliasedPath()];
-                }
-            )
-            ->filter(
-                static function (?array $aliasedPath): bool {
-                    return null !== $aliasedPath;
-                }
-            )
-            ->all();
+        $properties = $this->getValidatedProperties();
+        $nestedAliases = array_map([$this, 'getAliasArrayItem'], $properties);
+        $aliases = array_merge([], ...$nestedAliases);
+        $aliases = array_filter($aliases, static function (?array $aliasedPath): bool {
+            return null !== $aliasedPath;
+        });
+
+       return $aliases;
+    }
+
+    /**
+     * @return array<non-empty-string, non-empty-list<non-empty-string>|null>
+     */
+    private function getAliasArrayItem(GetableProperty $property): array
+    {
+        return [$property->getName() => $property->getAliasedPath()];
     }
 
     public function getTransformer(): TransformerAbstract
@@ -147,23 +142,22 @@ abstract class AbstractResourceType implements ResourceTypeInterface
             )
             ->all();
 
+        $readableRelationships = $this->extractRelationships($readableProperties);
+
         // create include definitions for the relationships
         $includes = $properties
             ->filter(
-                static function (GetableProperty $property) use ($readableProperties): bool {
-                    return null !== $readableProperties[$property->getName()];
+                static function (GetableProperty $property) use ($readableRelationships): bool {
+                    return array_key_exists($property->getName(), $readableRelationships);
                 }
             )
             ->mapWithKeys(
-                function (GetableProperty $property) use (
-                    $readableProperties,
-                    $defaultProperties
-                ): array {
-                    $relationshipType = $readableProperties[$property->getName()];
+                function (GetableProperty $property) use ($readableRelationships, $defaultProperties): array {
+                    $relationshipType = $readableRelationships[$property->getName()];
                     $customReadCallable = $property->getCustomReadCallback();
 
                     if (null !== $customReadCallable) {
-                        $customReadCallable = $this->wrapCallable($customReadCallable, $relationshipType);
+                        $customReadCallable = new TransformerObjectWrapper($customReadCallable, $relationshipType, $this->getWrapperFactory());
                     }
 
                     $propertyDefinition = new PropertyDefinition(
@@ -196,25 +190,28 @@ abstract class AbstractResourceType implements ResourceTypeInterface
      * determining the order of properties in JSON:API responses) you can not rely on these
      * effects; they may be changed in the future.
      *
-     * @return array<int, GetableProperty>
+     * @return list<GetableProperty>
      */
     abstract protected function getProperties(): array;
 
     /**
      * @template W of object
      *
-     * @return WrapperFactoryInterface<W, WrapperObject<W>>
+     * @return WrapperFactoryInterface<C, S, W, WrapperObject<W>>
      */
     abstract protected function getWrapperFactory(): WrapperFactoryInterface;
 
+    /**
+     * @return TypeAccessor<C, S>
+     */
     abstract protected function getTypeAccessor(): TypeAccessor;
 
     abstract protected function getLogger(): LoggerInterface;
 
     /**
-     * @param array<int, GetableProperty> $properties
+     * @param list<GetableProperty> $properties
      *
-     * @return array<int, GetableProperty>
+     * @return list<GetableProperty>
      */
     protected function processProperties(array $properties): array
     {
@@ -241,7 +238,7 @@ abstract class AbstractResourceType implements ResourceTypeInterface
     }
 
     /**
-     * @return array<int,string>
+     * @return list<non-empty-string>
      */
     protected function getDefaultProperties(): array
     {
@@ -260,7 +257,7 @@ abstract class AbstractResourceType implements ResourceTypeInterface
     }
 
     /**
-     * @return array<int,GetableProperty>
+     * @return list<GetableProperty>
      *
      * @throws InvalidArgumentException
      *
@@ -299,49 +296,61 @@ abstract class AbstractResourceType implements ResourceTypeInterface
     }
 
     /**
-     * Wraps the given callable in another callable which is then returned.
-     *
-     * The returned callable will execute the given callable and wraps the result(s)
-     * using {@link AbstractResourceType::getWrapperFactory()}. Because this method is
-     * only intended (and needed) for relationships we expect the result of the given
-     * callable to be either `null`, an `object`, or an iterable of `object`s. If something
-     * else is returned by the given callable the behavior is undefined.
-     *
-     * Normally the wrapping is done automatically in {@link PropertyDefinition::determineData()}
-     * because it utilizes a {@link WrapperObject} that has the logic of this method
-     * included. But for a custom read callable we must do the wrapping manually with
-     * the callable returned by this method.
-     *
-     * @template R of object
-     *
-     * @param callable(T, ParamBag): R|iterable<R>|null $callable
-     * @param ReadableTypeInterface<R>                  $relationshipType
-     *
-     * @return callable(T, ParamBag): WrapperObject<R>|array<int, WrapperObject<R>>|null
-     */
-    private function wrapCallable(callable $callable, ReadableTypeInterface $relationshipType): callable
-    {
-        return function (object $entity, ParamBag $params) use ($callable, $relationshipType) {
-            $rawResult = $callable($entity, $params);
-            if (null === $rawResult) {
-                return null;
-            }
-
-            if (is_iterable($rawResult)) {
-                return array_map(function (object $relationship) use ($relationshipType) {
-                    return $this->getWrapperFactory()->createWrapper($relationship, $relationshipType);
-                }, Iterables::asArray($rawResult));
-            }
-
-            return $this->getWrapperFactory()->createWrapper($rawResult, $relationshipType);
-        };
-    }
-
-    /**
-     * @return array<string, string|null>
+     * @return array<non-empty-string, non-empty-string|null>
      */
     private static function convertToNameAndTargetMapping(GetableProperty $property): array
     {
         return [$property->getName() => $property->getTypeName()];
+    }
+
+    private static function isReadable(GetableProperty $property): bool
+    {
+        return $property->isReadable();
+    }
+
+    private static function isFilterable(GetableProperty $property): bool
+    {
+        return $property->isFilterable();
+    }
+
+    private static function isSortable(GetableProperty $property): bool
+    {
+        return $property->isSortable();
+    }
+
+    private static function isInitializable(GetableProperty $property): bool
+    {
+        return $property->isInitializable();
+    }
+
+    /**
+     * @return non-empty-string
+     */
+    private static function getPropertyName(GetableProperty $property): string
+    {
+        return $property->getName();
+    }
+
+    /**
+     * @param array<non-empty-string, ReadableTypeInterface<C, S, object>|null> $properties
+     *
+     * @return array<non-empty-string, ResourceTypeInterface<C, S, object>>
+     */
+    private function extractRelationships(array $properties): array
+    {
+        $readableRelationships = array_filter(
+            $properties,
+            static function (?ReadableTypeInterface $property): bool {
+                return null !== $property;
+            }
+        );
+        return array_map(static function (ReadableTypeInterface $property): ResourceTypeInterface {
+            if (!$property instanceof ResourceTypeInterface) {
+                $typeClass = get_class($property);
+                throw new InvalidArgumentException("Relationship does not reference a resource type but '$typeClass' instead.");
+            }
+
+            return $property;
+        }, $readableRelationships);
     }
 }

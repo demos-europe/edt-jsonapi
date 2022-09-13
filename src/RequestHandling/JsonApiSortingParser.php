@@ -4,17 +4,28 @@ declare(strict_types=1);
 
 namespace EDT\JsonApi\RequestHandling;
 
+use EDT\Querying\Contracts\PathException;
+use EDT\Querying\Contracts\PathsBasedInterface;
 use EDT\Querying\Contracts\SortMethodFactoryInterface;
 use EDT\Querying\Contracts\SortMethodInterface;
+use InvalidArgumentException;
+use Safe\Exceptions\StringsException;
+use function in_array;
 use function Safe\substr;
 
+/**
+ * @template S of \EDT\Querying\Contracts\PathsBasedInterface
+ */
 class JsonApiSortingParser
 {
     /**
-     * @var SortMethodFactoryInterface
+     * @var SortMethodFactoryInterface<S>
      */
     private $sortMethodFactory;
 
+    /**
+     * @param SortMethodFactoryInterface<S> $sortMethodFactory
+     */
     public function __construct(SortMethodFactoryInterface $sortMethodFactory)
     {
         $this->sortMethodFactory = $sortMethodFactory;
@@ -24,7 +35,7 @@ class JsonApiSortingParser
      * Create an array of {@link SortMethodInterface} objects from the sort query parameter given if not null.
      * Otherwise, returns an empty array.
      *
-     * @return array<int,SortMethodInterface>
+     * @return list<S>
      */
     public function createFromQueryParamValue(?string $sortQueryParamValue): array
     {
@@ -37,7 +48,15 @@ class JsonApiSortingParser
         return array_map([$this, 'parseSortMethod'], $sortMethodsRaw);
     }
 
-    private function parseSortMethod(string $sortMethodRaw): SortMethodInterface
+    /**
+     * @param non-empty-string $sortMethodRaw
+     *
+     * @return S
+     *
+     * @throws PathException
+     * @throws StringsException
+     */
+    private function parseSortMethod(string $sortMethodRaw): PathsBasedInterface
     {
         return $this->isNegativeDirection($sortMethodRaw)
             ? $this->parseNegativeDirection($sortMethodRaw)
@@ -45,29 +64,52 @@ class JsonApiSortingParser
     }
 
 
-    private function parseNegativeDirection(string $sortMethodRaw): SortMethodInterface
+    /**
+     * @param non-empty-string $sortMethodRaw
+     *
+     * @return S
+     *
+     * @throws StringsException
+     * @throws PathException
+     */
+    private function parseNegativeDirection(string $sortMethodRaw): PathsBasedInterface
     {
         $pathString = substr($sortMethodRaw, 1);
         $pathArray = $this->toPathArray($pathString);
         return $this->sortMethodFactory->propertyDescending(...$pathArray);
     }
 
-    private function parsePositiveDirection(string $sortMethodRaw): SortMethodInterface
+    /**
+     * @param non-empty-string $sortMethodRaw
+     *
+     * @return S
+     *
+     * @throws PathException
+     */
+    private function parsePositiveDirection(string $sortMethodRaw): PathsBasedInterface
     {
         $pathArray = $this->toPathArray($sortMethodRaw);
         return $this->sortMethodFactory->propertyAscending(...$pathArray);
     }
 
+    /**
+     * @param non-empty-string $sortMethodRaw
+     */
     private function isNegativeDirection(string $sortMethodRaw): bool
     {
         return 0 === strncmp($sortMethodRaw, '-', 1);
     }
 
     /**
-     * @return array<int, string>
+     * @return list<non-empty-string>
      */
     private function toPathArray(string $pathString): array
     {
-        return explode('.', $pathString);
+        $path = explode('.', $pathString);
+        if (in_array('', $path, true)) {
+            throw new InvalidArgumentException("Invalid path: '$pathString'.");
+        }
+
+        return $path;
     }
 }

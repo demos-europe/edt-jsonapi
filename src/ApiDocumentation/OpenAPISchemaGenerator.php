@@ -134,6 +134,7 @@ final class OpenAPISchemaGenerator
 
                 return $tag;
             })
+            ->values()
             ->all();
 
         $openApi->components = new Components(['schemas' => $this->schemaStore->all()]);
@@ -300,9 +301,7 @@ final class OpenAPISchemaGenerator
             ->filter(
                 function (string $propertyType): bool {
                     return $this->resourceTypeProvider->isTypeAvailable($propertyType)
-                        && $this->resourceTypeProvider->getAvailableType(
-                            $propertyType
-                        )->isReferencable();
+                        && $this->resourceTypeProvider->getAvailableType($propertyType)->isReferencable();
                 }
             )->map(
                 function (string $propertyType): array {
@@ -410,7 +409,7 @@ final class OpenAPISchemaGenerator
     }
 
     /**
-     * @return array<int, Parameter>
+     * @return list<Parameter>
      *
      * @throws TypeErrorException
      */
@@ -455,7 +454,7 @@ final class OpenAPISchemaGenerator
     }
 
     /**
-     * @return array<int, Parameter>
+     * @return list<Parameter>
      *
      * @throws TypeErrorException
      */
@@ -506,7 +505,7 @@ final class OpenAPISchemaGenerator
     }
 
     /**
-     * @return array<int, Parameter>
+     * @return list<Parameter>
      *
      * @throws TypeErrorException
      */

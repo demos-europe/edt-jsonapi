@@ -14,21 +14,28 @@ use EDT\Wrapping\Contracts\TypeProviderInterface;
 use InvalidArgumentException;
 
 /**
- * @psalm-type JsonApiRelationship = array{type: string, id: string}
- * @psalm-type JsonApiRelationships = array<string,array{data: array<int, JsonApiRelationship>|JsonApiRelationship|null}>
+ * @template C of \EDT\Querying\Contracts\PathsBasedInterface
+ * @template S of \EDT\Querying\Contracts\PathsBasedInterface
+ *
+ * @psalm-type JsonApiRelationship = array{type: non-empty-string, id: non-empty-string}
+ * @psalm-type JsonApiRelationships = array<non-empty-string,array{data: list<JsonApiRelationship>|JsonApiRelationship|null}>
  */
 class PropertyValuesGenerator
 {
     /**
-     * @var TypeProviderInterface
+     * @var TypeProviderInterface<C, S>
      */
     private $typeProvider;
 
     /**
-     * @var EntityFetcherInterface
+     * @var EntityFetcherInterface<C, S>
      */
     private $entityFetcher;
 
+    /**
+     * @param EntityFetcherInterface<C, S> $entityFetcher
+     * @param TypeProviderInterface<C, S>  $typeProvider
+     */
     public function __construct(EntityFetcherInterface $entityFetcher, TypeProviderInterface $typeProvider)
     {
         $this->typeProvider = $typeProvider;
@@ -39,10 +46,10 @@ class PropertyValuesGenerator
      * Converts the attributes and relationships from the JSON:API request format into
      * a single list, mapping the property names to the actual values to set.
      *
-     * @param array<string, mixed|null> $attributes
-     * @param JsonApiRelationships      $relationships
+     * @param array<non-empty-string, mixed|null> $attributes
+     * @param JsonApiRelationships                $relationships
      *
-     * @return array<string,mixed>
+     * @return array<non-empty-string, mixed>
      */
     public function generatePropertyValues(array $attributes, array $relationships): array
     {
@@ -69,10 +76,10 @@ class PropertyValuesGenerator
     }
 
     /**
-     * @param array<string,mixed> $attributes
-     * @param array<string,mixed> $relationships
+     * @param array<non-empty-string, mixed> $attributes
+     * @param array<non-empty-string, mixed> $relationships
      *
-     * @return array<string,mixed>
+     * @return array<non-empty-string, mixed>
      *
      * @throws InvalidArgumentException
      */
@@ -97,7 +104,7 @@ class PropertyValuesGenerator
     }
 
     /**
-     * @return array<int,object>
+     * @return list<object>
      */
     private function getRelationshipEntities(ToManyResourceLinkage $resourceLinkage): array
     {
@@ -111,6 +118,7 @@ class PropertyValuesGenerator
     {
         $typeName = $resourceIdentifierObject->getType();
 
+        /** @var ResourceTypeInterface $type */
         $type = $this->typeProvider->getAvailableType($typeName, ResourceTypeInterface::class);
         $id = $resourceIdentifierObject->getId();
 
