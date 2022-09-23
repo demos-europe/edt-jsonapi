@@ -13,8 +13,10 @@ use cebe\openapi\spec\PathItem;
 use cebe\openapi\spec\Response;
 use cebe\openapi\spec\Schema;
 use cebe\openapi\spec\Tag;
+use Closure;
 use EDT\JsonApi\ResourceTypes\AbstractResourceType;
 use EDT\JsonApi\ResourceTypes\ResourceTypeInterface;
+use EDT\Wrapping\Contracts\Types\TypeInterface;
 use EDT\Wrapping\TypeProviders\PrefilledTypeProvider;
 use Throwable;
 use function collect;
@@ -99,7 +101,10 @@ final class OpenAPISchemaGenerator
             ]
         );
 
-        $tags = collect($this->resourceTypeProvider->getAllAvailableTypes(ResourceTypeInterface::class))
+        $tags = collect($this->resourceTypeProvider->getAllAvailableTypes())
+            ->filter(static function (TypeInterface $type): bool {
+                return $type instanceof ResourceTypeInterface;
+            })
             ->map(function (ResourceTypeInterface $type): ResourceTypeInterface {
                 // create schema information for all resource types
 
@@ -298,12 +303,8 @@ final class OpenAPISchemaGenerator
 
         $relationships = collect($resource->getReadableProperties())
             ->diff([null])
-            ->filter(
-                function (string $propertyType): bool {
-                    return $this->resourceTypeProvider->isTypeAvailable($propertyType)
-                        && $this->resourceTypeProvider->getAvailableType($propertyType)->isReferencable();
-                }
-            )->map(
+            ->filter(Closure::fromCallable([$this, 'isReferenceable']))
+            ->map(
                 function (string $propertyType): array {
                     return ['$ref' => $this->schemaStore->getSchemaReference($propertyType)];
                 }
@@ -312,6 +313,18 @@ final class OpenAPISchemaGenerator
         $properties = $attributes->merge($relationships)->all();
 
         return new Schema(['type' => 'object', 'properties' => $properties]);
+    }
+
+    /**
+     * @param non-empty-string $typeName
+     */
+    private function isReferenceable(string $typeName): bool
+    {
+        return $this->resourceTypeProvider->isTypeAvailable($typeName)
+            && $this->resourceTypeProvider->requestType($typeName)
+                ->available(true)
+                ->getTypeInstance()
+                ->isReferencable();
     }
 
     /**
