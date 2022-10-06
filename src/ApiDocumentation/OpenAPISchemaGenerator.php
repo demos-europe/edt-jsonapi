@@ -13,13 +13,11 @@ use cebe\openapi\spec\PathItem;
 use cebe\openapi\spec\Response;
 use cebe\openapi\spec\Schema;
 use cebe\openapi\spec\Tag;
-use Closure;
 use EDT\JsonApi\ResourceTypes\AbstractResourceType;
 use EDT\JsonApi\ResourceTypes\ResourceTypeInterface;
 use EDT\Wrapping\Contracts\Types\TypeInterface;
 use EDT\Wrapping\TypeProviders\PrefilledTypeProvider;
 use Throwable;
-use function collect;
 use function count;
 use Psr\Log\LoggerInterface;
 use ReflectionException;
@@ -101,49 +99,47 @@ final class OpenAPISchemaGenerator
             ]
         );
 
-        $tags = collect($this->resourceTypeProvider->getAllAvailableTypes())
-            ->filter(static function (TypeInterface $type): bool {
-                return $type instanceof ResourceTypeInterface;
-            })
-            ->map(function (ResourceTypeInterface $type): ResourceTypeInterface {
-                // create schema information for all resource types
+        $tags = $this->resourceTypeProvider->getAllAvailableTypes();
+        $tags = array_filter($tags, static function (TypeInterface $type): bool {
+            return $type instanceof ResourceTypeInterface;
+        });
+        $tags = array_map(function (ResourceTypeInterface $type): ResourceTypeInterface {
+            // create schema information for all resource types
 
-                $typeIdentifier = $type::getName();
-                if (!$this->schemaStore->has($typeIdentifier)) {
-                    $schema = $this->createSchema($type);
-                    $this->schemaStore->set($typeIdentifier, $schema);
-                }
+            $typeIdentifier = $type::getName();
+            if (!$this->schemaStore->has($typeIdentifier)) {
+                $schema = $this->createSchema($type);
+                $this->schemaStore->set($typeIdentifier, $schema);
+            }
 
-                return $type;
-            })
-            ->filter(static function (ResourceTypeInterface $type): bool {
-                // remove non-directly accessible ones
-                return $type->isDirectlyAccessible();
-            })
-            ->map(function (ResourceTypeInterface $type) use ($openApi): Tag {
-                // add routing information for directly accessible resource types
-                $tag = $this->createTag($type);
+            return $type;
+        }, $tags);
+        $tags = array_filter($tags, static function (ResourceTypeInterface $type): bool {
+            // remove non-directly accessible ones
+            return $type->isDirectlyAccessible();
+        });
+        $tags = array_map(function (ResourceTypeInterface $type) use ($openApi): Tag {
+            // add routing information for directly accessible resource types
+            $tag = $this->createTag($type);
 
-                $listMethodPathItem = $this->createListMethodsPathItem($tag, $type);
+            $listMethodPathItem = $this->createListMethodsPathItem($tag, $type);
 
-                $entityMethodsPathItem = $this->createEntityMethodsPathItem($tag, $type);
+            $entityMethodsPathItem = $this->createEntityMethodsPathItem($tag, $type);
 
-                $baseUrl = $this->router->generate(
-                    'api_resource_list',
-                    ['resourceType' => $type::getName()]
-                );
+            $baseUrl = $this->router->generate(
+                'api_resource_list',
+                ['resourceType' => $type::getName()]
+            );
 
-                $openApi->paths[$baseUrl] = $listMethodPathItem;
+            $openApi->paths[$baseUrl] = $listMethodPathItem;
 
-                $openApi->paths[$baseUrl.'/{resourceId}/'] = $entityMethodsPathItem;
+            $openApi->paths[$baseUrl.'/{resourceId}/'] = $entityMethodsPathItem;
 
-                return $tag;
-            })
-            ->values()
-            ->all();
+            return $tag;
+        }, $tags);
 
         $openApi->components = new Components(['schemas' => $this->schemaStore->all()]);
-        $openApi->tags = $tags;
+        $openApi->tags = array_values($tags);
 
         return $openApi;
     }
@@ -226,7 +222,9 @@ final class OpenAPISchemaGenerator
                             $resource,
                             [
                                 '$ref' => $this->schemaStore->getSchemaReference($resource::getName()),
-                            ]
+                            ],
+                            [],
+                            false
                         ),
                     ],
                 ],
@@ -288,29 +286,24 @@ final class OpenAPISchemaGenerator
     /**
      * @throws TypeErrorException
      */
-    private function createSchema(ResourceTypeInterface $resource): Schema
+    private function createSchema(ResourceTypeInterface $type): Schema
     {
-        $attributes = collect($resource->getReadableProperties())
-            ->filter(static function(?string $typeIdentifier, string $propertyName): bool {
-                return null === $typeIdentifier;
-            })
-            ->map(function (?string $null, string $propertyName) use ($resource): array {
-                // TODO: this is probably incorrect for all aliases with a path longer than 1 element
-                $propertyName = $resource->getAliases()[$propertyName][0] ?? $propertyName;
+        $properties = $type->getReadableProperties();
+        $properties = array_filter(
+            $properties,
+            function (?string $typeIdentifier) {
+                return null === $typeIdentifier || $this->isReferenceable($typeIdentifier);
+            }
+        );
 
-                return $this->resolveAttributeType($resource, $propertyName);
-            });
+        $properties = array_map(function (?string $typeIdentifier, string $propertyName) use ($type): array {
+            // TODO: this is probably incorrect for all aliases with a path longer than 1 element
+            $propertyName = $type->getAliases()[$propertyName][0] ?? $propertyName;
 
-        $relationships = collect($resource->getReadableProperties())
-            ->diff([null])
-            ->filter(Closure::fromCallable([$this, 'isReferenceable']))
-            ->map(
-                function (string $propertyType): array {
-                    return ['$ref' => $this->schemaStore->getSchemaReference($propertyType)];
-                }
-            );
-
-        $properties = $attributes->merge($relationships)->all();
+            return null === $typeIdentifier
+                ? $this->resolveAttributeType($type, $propertyName)
+                : ['$ref' => $this->schemaStore->getSchemaReference($typeIdentifier)];
+        }, $properties, array_keys($properties));
 
         return new Schema(['type' => 'object', 'properties' => $properties]);
     }
@@ -328,15 +321,15 @@ final class OpenAPISchemaGenerator
     }
 
     /**
-     * @param array<string, mixed> $dataObjects
+     * @param array{type: non-empty-string, items: array<non-empty-string, non-empty-string>}|array<non-empty-string, non-empty-string> $dataObjects
      *
      * @throws TypeErrorException
      */
     private function wrapAsJsonApiResponseSchema(
         ResourceTypeInterface $resource,
         array $dataObjects,
-        array $includedObjects = [],
-        bool $isList = false
+        array $includedObjects,
+        bool $isList
     ): Schema {
         $data = [
             'type'       => 'object',
@@ -396,7 +389,9 @@ final class OpenAPISchemaGenerator
     }
 
     /**
-     * @return array<string,string>
+     * @param non-empty-string $propertyName
+     *
+     * @return array{type: string, format?: non-empty-string, description?: string}
      *
      * @throws ReflectionException
      * @throws Throwable

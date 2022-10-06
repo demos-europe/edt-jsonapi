@@ -6,6 +6,8 @@ namespace EDT\JsonApi\OutputTransformation;
 
 use EDT\JsonApi\RequestHandling\MessageFormatter;
 use EDT\Querying\Utilities\Iterables;
+use Safe\Exceptions\StringsException;
+use function gettype;
 use const ARRAY_FILTER_USE_BOTH;
 use const ARRAY_FILTER_USE_KEY;
 use function array_key_exists;
@@ -38,23 +40,25 @@ use Psr\Log\LoggerInterface;
  *
  * If the transformer is mis-configured, e.g. definitions for properties are given that do not exist
  * in the entity to be transformed, then the behavior is undefined.
+ *
+ * @template TEntity of object
  */
 class DynamicTransformer extends TransformerAbstract
 {
     private const ID = 'id';
 
     /**
-     * @var string
+     * @var non-empty-string
      */
     private $type;
 
     /**
-     * @var array<string,IncludeDefinitionInterface>
+     * @var array<non-empty-string, IncludeDefinitionInterface>
      */
     private $includeDefinitions;
 
     /**
-     * @var array<string,PropertyDefinitionInterface>
+     * @var array<non-empty-string, PropertyDefinitionInterface>
      */
     private $attributeDefinitions;
 
@@ -69,12 +73,13 @@ class DynamicTransformer extends TransformerAbstract
     private $messageFormatter;
 
     /**
-     * @param array<string,PropertyDefinitionInterface> $attributeDefinitions mappings from an
-     *                                                                        attribute name to its
-     *                                                                        definition
-     * @param array<string,IncludeDefinitionInterface>  $includeDefinitions   mappings from an
-     *                                                                        include name to its
-     *                                                                        definition
+     * @param non-empty-string                                                     $type
+     * @param array<non-empty-string, PropertyDefinitionInterface<TEntity, mixed>> $attributeDefinitions mappings from an
+     *                                                                                   attribute name to its
+     *                                                                                   definition
+     * @param array<non-empty-string, IncludeDefinitionInterface<TEntity, object>> $includeDefinitions   mappings from an
+     *                                                                                   include name to its
+     *                                                                                   definition
      */
     public function __construct(
         string $type,
@@ -87,7 +92,7 @@ class DynamicTransformer extends TransformerAbstract
         $this->includeDefinitions = $includeDefinitions;
         $this->attributeDefinitions = $attributeDefinitions;
         if (!array_key_exists(self::ID, $this->attributeDefinitions)) {
-            throw new InvalidArgumentException('A definition for the `id` is required, as it is needed by Fractal');
+            throw new InvalidArgumentException('An attribute definition for the `id` is required, as it is needed by Fractal');
         }
         $this->setAvailableIncludes(array_keys($includeDefinitions));
         $this->setDefaultIncludes(
@@ -101,12 +106,18 @@ class DynamicTransformer extends TransformerAbstract
      * If no specific fields were requested the attributes marked as defaults will be returned. If
      * a specific set of fields was requested only attributes in that set will be returned.
      *
-     * @param object $entity
+     * @param TEntity $entity
      *
-     * @return array<string,mixed>
+     * @return array<string, mixed>
+     *
+     * @throws TransformException
      */
     public function transform($entity): array
     {
+        if (!is_object($entity)) {
+            $actualType = gettype($entity);
+            throw new InvalidArgumentException("Expected object, got $actualType when trying to transform into `$this->type`.");
+        }
         $paramBag = new ParamBag([]);
         $scope = $this->getCurrentScope();
         if (null === $scope) {
@@ -145,10 +156,6 @@ class DynamicTransformer extends TransformerAbstract
             );
         }
 
-        if (!is_object($entity)) {
-            throw new InvalidArgumentException('Expected object, got '.gettype($entity));
-        }
-
         return array_map(
             static function (PropertyDefinitionInterface $definition) use ($entity, $paramBag) {
                 return $definition->determineData($entity, $paramBag);
@@ -158,11 +165,11 @@ class DynamicTransformer extends TransformerAbstract
     }
 
     /**
-     * @param array<mixed,mixed> $arguments We expect the include-target (the entity to transform)
-     *                                      to be the first value and a
-     *                                      {@link \League\Fractal\ParamBag} as second parameter.
-     *                                      Otherwise, an {@link InvalidArgumentException} is
-     *                                      thrown.
+     * @param array<mixed, mixed> $arguments We expect the include-target (the entity to transform)
+     *                                       to be the first value and a
+     *                                       {@link \League\Fractal\ParamBag} as second parameter.
+     *                                       Otherwise, an {@link InvalidArgumentException} is
+     *                                       thrown.
      *
      * @return Collection|Item|NullResource
      */
@@ -177,7 +184,7 @@ class DynamicTransformer extends TransformerAbstract
 
         $data = $includeDefinition->determineData($arguments[0], $arguments[1]);
         if (null === $data) {
-            return new NullResource();
+            return $this->null();
         }
 
         $params = [
@@ -221,6 +228,10 @@ class DynamicTransformer extends TransformerAbstract
         return in_array($attributeName, $fieldset, true);
     }
 
+    /**
+     * @throws StringsException
+     * @throws InvalidArgumentException
+     */
     private function getIncludeName(string $includeMethodName): string
     {
         if (0 !== strncmp($includeMethodName, 'include', 7)) {
@@ -230,6 +241,9 @@ class DynamicTransformer extends TransformerAbstract
         return lcfirst(substr($includeMethodName, 7));
     }
 
+    /**
+     * @return IncludeDefinitionInterface
+     */
     private function getIncludeDefinition(string $includeName): IncludeDefinitionInterface
     {
         if (!array_key_exists($includeName, $this->includeDefinitions)) {
@@ -239,6 +253,9 @@ class DynamicTransformer extends TransformerAbstract
         return $this->includeDefinitions[$includeName];
     }
 
+    /**
+     * @throws ExcludeException
+     */
     private function validateExcludes(Scope $scope): void
     {
         $requestedExcludes = $scope->getManager()->getRequestedExcludes();

@@ -6,13 +6,12 @@ namespace EDT\JsonApi\ApiDocumentation;
 
 use Closure;
 use EDT\JsonApi\ResourceTypes\AbstractResourceType;
-use EDT\JsonApi\ResourceTypes\GetableProperty;
+use EDT\JsonApi\ResourceTypes\PropertyCollection;
 use EDT\Parsing\Utilities\DocblockTagParser;
 use ReflectionFunctionAbstract;
 use ReflectionMethod;
 use ReflectionProperty;
 use function array_key_exists;
-use function collect;
 use Doctrine\Common\Annotations\AnnotationReader;
 use Doctrine\ORM\Mapping\Column;
 use Doctrine\ORM\Mapping\Id;
@@ -40,14 +39,16 @@ class AttributeTypeResolver
     private $classReflectionCache = [];
 
     /**
-     * @var array<class-string,array<string,GetableProperty>>
+     * @var array<class-string, PropertyCollection>
      */
     private $propertiesCache = [];
 
     /**
      * Return a valid `cebe\OpenApi` type declaration.
      *
-     * @return array<string,string>
+     * @param non-empty-string $propertyName
+     *
+     * @return array{type: string, format?: non-empty-string, description?: string}
      *
      * @throws ReflectionException
      * @throws Throwable
@@ -58,20 +59,12 @@ class AttributeTypeResolver
     ): array {
         $resourceClass = get_class($resourceType);
         if (!array_key_exists($resourceClass, $this->propertiesCache)) {
-            $this->propertiesCache[$resourceClass] = collect(
-                $resourceType->getValidatedProperties()
-            )
-                ->mapWithKeys(static function (GetableProperty $property): array {
-                    return [$property->getName() => $property];
-                })
-                ->all();
+            $this->propertiesCache[$resourceClass] = $resourceType->getPropertyCollection();
         }
 
         $resourceProperties = $this->propertiesCache[$resourceClass];
-        if (array_key_exists($propertyName, $resourceProperties)) {
-            $property = $resourceProperties[$propertyName];
-
-            $customReadCallback = $property->getCustomReadCallback();
+        if ($resourceProperties->has($propertyName)) {
+            $customReadCallback = $resourceProperties->get($propertyName)->getCustomReadCallback();
             if (null !== $customReadCallback) {
                 return $this->resolveTypeFromCallable($customReadCallback, $resourceClass, $propertyName);
             }
@@ -83,7 +76,7 @@ class AttributeTypeResolver
     /**
      * @param class-string $entityClassName
      *
-     * @return string[]
+     * @return array{type: non-empty-string, format?: non-empty-string, description?: string}
      *
      * @throws ReflectionException
      */
@@ -154,7 +147,7 @@ class AttributeTypeResolver
     }
 
     /**
-     * @return array{type: string, format?: string}
+     * @return array{type: non-empty-string, format?: non-empty-string}
      */
     private function mapDqlType(string $dqlType): array
     {
