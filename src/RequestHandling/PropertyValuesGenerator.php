@@ -19,19 +19,19 @@ use function count;
  * @template TSorting of \EDT\Querying\Contracts\PathsBasedInterface
  *
  * @psalm-type JsonApiRelationship = array{type: non-empty-string, id: non-empty-string}
- * @psalm-type JsonApiRelationships = array<non-empty-string,array{data: list<JsonApiRelationship>|JsonApiRelationship|null}>
+ * @psalm-type JsonApiRelationships = array<non-empty-string, array{data: list<JsonApiRelationship>|JsonApiRelationship|null}>
  */
 class PropertyValuesGenerator
 {
     /**
      * @var TypeProviderInterface<TCondition, TSorting>
      */
-    private $typeProvider;
+    private TypeProviderInterface $typeProvider;
 
     /**
      * @var EntityFetcherInterface<TCondition, TSorting>
      */
-    private $entityFetcher;
+    private EntityFetcherInterface $entityFetcher;
 
     /**
      * @param EntityFetcherInterface<TCondition, TSorting> $entityFetcher

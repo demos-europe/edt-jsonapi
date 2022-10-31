@@ -23,17 +23,11 @@ class DynamicTransformerFactory
     /**
      * @var TypeAccessor<TCondition, TSorting>
      */
-    private $typeAccessor;
+    private TypeAccessor $typeAccessor;
 
-    /**
-     * @var MessageFormatter
-     */
-    private $messageFormatter;
+    private MessageFormatter $messageFormatter;
 
-    /**
-     * @var LoggerInterface
-     */
-    private $logger;
+    private LoggerInterface $logger;
 
     /**
      * @param TypeAccessor<TCondition, TSorting> $typeAccessor
@@ -80,19 +74,13 @@ class DynamicTransformerFactory
      */
     private function transformToAttributeDefinitions(ResourceTypeInterface $type, PropertyCollection $propertyCollection, WrapperObjectFactory $wrapperFactory): array
     {
-        return array_map(static function (Property $property) use ($type, $wrapperFactory): PropertyDefinitionInterface {
-            $propertyName = $property->getName();
-
-            $propertyDefinition = new PropertyDefinition(
-                $propertyName,
-                $property->isDefaultField(),
-                $type,
-                $wrapperFactory,
-                $property->getCustomReadCallback()
-            );
-
-            return $propertyDefinition;
-        }, $propertyCollection->getReadableAttributes());
+        return array_map(static fn (Property $property): PropertyDefinitionInterface => new PropertyDefinition(
+            $property->getName(),
+            $property->isDefaultField(),
+            $type,
+            $wrapperFactory,
+            $property->getCustomReadCallback()
+        ), $propertyCollection->getReadableAttributes());
     }
 
     /**

@@ -18,15 +18,9 @@ use Tests\data\Types\BirthType;
 
 class FieldsValidatorTest extends TestCase
 {
-    /**
-     * @var FieldsValidator
-     */
-    private $fieldsValidator;
+    private FieldsValidator $fieldsValidator;
 
-    /**
-     * @var PrefilledTypeProvider
-     */
-    private $typeProvider;
+    private PrefilledTypeProvider $typeProvider;
 
     protected function setUp(): void
     {
@@ -78,9 +72,7 @@ class FieldsValidatorTest extends TestCase
 
     public function getInvalidFieldsFormats(): array
     {
-        return array_map(static function ($fields): array {
-            return [$fields];
-        }, [
+        return array_map(static fn ($fields): array => [$fields], [
             [1 => 'x'],
             [-1 => 'x'],
             [0 => 'x'],
@@ -106,9 +98,7 @@ class FieldsValidatorTest extends TestCase
 
     public function getValidFieldsFormats(): array
     {
-        return array_map(static function ($fields): array {
-            return [$fields];
-        }, [
+        return array_map(static fn ($fields): array => [$fields], [
             [],
             ['Foo' => ''],
             ['Foo' => 'x'],

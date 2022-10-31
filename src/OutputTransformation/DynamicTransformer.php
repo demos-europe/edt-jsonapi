@@ -50,27 +50,21 @@ class DynamicTransformer extends TransformerAbstract
     /**
      * @var non-empty-string
      */
-    private $type;
+    private string $type;
 
     /**
      * @var array<non-empty-string, IncludeDefinitionInterface>
      */
-    private $includeDefinitions;
+    private array $includeDefinitions;
 
     /**
      * @var array<non-empty-string, PropertyDefinitionInterface>
      */
-    private $attributeDefinitions;
+    private array $attributeDefinitions;
 
-    /**
-     * @var LoggerInterface|null
-     */
-    private $logger;
+    private ?LoggerInterface $logger = null;
 
-    /**
-     * @var MessageFormatter
-     */
-    private $messageFormatter;
+    private MessageFormatter $messageFormatter;
 
     /**
      * @param non-empty-string                                                     $type
@@ -128,16 +122,11 @@ class DynamicTransformer extends TransformerAbstract
             // default definitions
             $definitions = array_filter(
                 $this->attributeDefinitions,
-                static function (
-                    PropertyDefinitionInterface $definition,
-                    string $attributeName
-                ): bool {
-                    return
-                        // always keep the 'id` attribute, it is required by Fractal
-                        self::ID === $attributeName
-                        // keep the attributes that are to be returned by default
-                        || $definition->isToBeUsedAsDefaultField();
-                },
+                static fn (PropertyDefinitionInterface $definition, string $attributeName): bool =>
+                    // always keep the 'id` attribute, it is required by Fractal
+                    self::ID === $attributeName
+                    // keep the attributes that are to be returned by default
+                    || $definition->isToBeUsedAsDefaultField(),
                 ARRAY_FILTER_USE_BOTH
             );
         } else {
@@ -145,21 +134,17 @@ class DynamicTransformer extends TransformerAbstract
             $fieldset = Iterables::asArray($fieldsetBag);
             $definitions = array_filter(
                 $this->attributeDefinitions,
-                function (string $attributeName) use ($fieldset): bool {
-                    return
-                        // always keep the 'id` attribute, it is required by Fractal
-                        self::ID === $attributeName
-                        // keep the attributes that were requested
-                        || $this->isAttributeRequested($attributeName, $fieldset);
-                },
+                fn (string $attributeName): bool =>
+                    // always keep the 'id` attribute, it is required by Fractal
+                    self::ID === $attributeName
+                    // keep the attributes that were requested
+                    || $this->isAttributeRequested($attributeName, $fieldset),
                 ARRAY_FILTER_USE_KEY
             );
         }
 
         return array_map(
-            static function (PropertyDefinitionInterface $definition) use ($entity, $paramBag) {
-                return $definition->determineData($entity, $paramBag);
-            },
+            static fn (PropertyDefinitionInterface $definition) => $definition->determineData($entity, $paramBag),
             $definitions
         );
     }

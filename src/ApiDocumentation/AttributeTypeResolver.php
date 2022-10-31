@@ -34,14 +34,14 @@ use function strlen;
 class AttributeTypeResolver
 {
     /**
-     * @var array<class-string,ReflectionClass>
+     * @var array<class-string, ReflectionClass>
      */
-    private $classReflectionCache = [];
+    private array $classReflectionCache = [];
 
     /**
      * @var array<class-string, PropertyCollection>
      */
-    private $propertiesCache = [];
+    private array $propertiesCache = [];
 
     /**
      * Return a valid `cebe\OpenApi` type declaration.
