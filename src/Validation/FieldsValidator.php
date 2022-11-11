@@ -4,8 +4,7 @@ declare(strict_types=1);
 
 namespace EDT\JsonApi\Validation;
 
-use EDT\Wrapping\Contracts\Types\ReadableTypeInterface;
-use EDT\Wrapping\Utilities\TypeAccessor;
+use EDT\Wrapping\Contracts\Types\TransferableTypeInterface;
 use Symfony\Component\Validator\Constraint;
 use Symfony\Component\Validator\Constraints as Assert;
 use Symfony\Component\Validator\Exception\ValidationFailedException;
@@ -14,8 +13,6 @@ use function is_array;
 
 class FieldsValidator
 {
-    private TypeAccessor $typeAccessor;
-
     private ValidatorInterface $validator;
 
     /**
@@ -28,9 +25,8 @@ class FieldsValidator
      */
     private array $propertiesConstraints;
 
-    public function __construct(TypeAccessor $typeAccessor, ValidatorInterface $validator)
+    public function __construct(ValidatorInterface $validator)
     {
-        $this->typeAccessor = $typeAccessor;
         $this->validator = $validator;
         $this->typeConstraints = [
             new Assert\NotNull(),
@@ -89,14 +85,14 @@ class FieldsValidator
     /**
      * @return list<string>
      */
-    public function getNonReadableProperties(string $propertiesString, ReadableTypeInterface $type): array
+    public function getNonReadableProperties(string $propertiesString, TransferableTypeInterface $type): array
     {
         if ('' === $propertiesString) {
             return [];
         }
 
         $requestedProperties = explode(',', $propertiesString);
-        $readableProperties = $this->typeAccessor->getAccessibleReadableProperties($type);
+        $readableProperties = $type->getReadableProperties();
         $readablePropertyNames = array_keys($readableProperties);
 
         return array_values(array_diff($requestedProperties, $readablePropertyNames));

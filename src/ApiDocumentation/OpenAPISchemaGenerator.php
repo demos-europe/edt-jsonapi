@@ -16,6 +16,7 @@ use cebe\openapi\spec\Tag;
 use EDT\JsonApi\ResourceTypes\AbstractResourceType;
 use EDT\JsonApi\ResourceTypes\ResourceTypeInterface;
 use EDT\Wrapping\Contracts\TypeProviderInterface;
+use EDT\Wrapping\Contracts\Types\TypeInterface;
 use Throwable;
 use function count;
 use Psr\Log\LoggerInterface;
@@ -86,7 +87,6 @@ final class OpenAPISchemaGenerator
         $tags = array_filter(
             $tags,
             static fn (?ResourceTypeInterface $type): bool => null !== $type
-                && ($type->isExposedAsPrimaryResource() || $type->isExposedAsRelationship())
         );
 
         $tags = array_map(function (ResourceTypeInterface $type): ResourceTypeInterface {
@@ -273,7 +273,12 @@ final class OpenAPISchemaGenerator
     private function createSchema(ResourceTypeInterface $type): Schema
     {
         $properties = $type->getReadableProperties();
-        $properties = array_filter($properties, [$this, 'isExposedAsAttributeOrRelationship']);
+        $properties = array_filter(
+            $properties,
+            fn (?TypeInterface $relationshipType): bool => null === $relationshipType
+                || $relationshipType instanceof ResourceTypeInterface
+        );
+        $properties = array_map(static fn (?ResourceTypeInterface $type): ?string => null === $type ? null : $type::getName(), $properties);
 
         $properties = array_map(function (?string $typeIdentifier, string $propertyName) use ($type): array {
             // TODO: this is probably incorrect for all aliases with a path longer than 1 element
@@ -285,21 +290,6 @@ final class OpenAPISchemaGenerator
         }, $properties, array_keys($properties));
 
         return new Schema(['type' => 'object', 'properties' => $properties]);
-    }
-
-    /**
-     * @param non-empty-string|null $typeIdentifier
-     */
-    private function isExposedAsAttributeOrRelationship(?string $typeIdentifier): bool
-    {
-        if (null === $typeIdentifier) {
-            return true;
-        }
-
-        return $this->typeProvider
-            ->requestType($typeIdentifier)
-            ->exposedAsRelationship()
-            ->isPresent();
     }
 
     /**
