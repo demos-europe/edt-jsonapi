@@ -18,20 +18,12 @@ use function array_key_exists;
 class PagePaginationParser implements PaginationParserInterface
 {
     /**
-     * @var positive-int
-     */
-    private int $defaultSize;
-
-    private ValidatorInterface $validator;
-
-    /**
      * @param positive-int $defaultSize
      */
-    public function __construct(int $defaultSize, ValidatorInterface $validator)
-    {
-        $this->defaultSize = $defaultSize;
-        $this->validator = $validator;
-    }
+    public function __construct(
+        private readonly int $defaultSize,
+        private readonly ValidatorInterface $validator
+    ) {}
 
     /**
      * @throws ValidationFailedException
@@ -59,13 +51,11 @@ class PagePaginationParser implements PaginationParserInterface
     }
 
     /**
-     * @param mixed $page
-     *
      * @return array{size?: non-empty-string, number?: non-empty-string}
      *
      * @throws ValidationFailedException
      */
-    protected function getValidatedPage($page): array
+    protected function getValidatedPage(mixed $page): array
     {
         $violations = $this->validator->validate($page, [
             new Assert\NotNull(),

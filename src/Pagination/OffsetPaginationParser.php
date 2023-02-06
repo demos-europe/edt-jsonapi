@@ -16,17 +16,14 @@ use Symfony\Component\Validator\Constraints as Assert;
  */
 class OffsetPaginationParser implements PaginationParserInterface
 {
-    private ValidatorInterface $validator;
-
-    public function __construct(ValidatorInterface $validator)
-    {
-        $this->validator = $validator;
-    }
+    public function __construct(
+        private readonly ValidatorInterface $validator
+    ) {}
 
     /**
      * @throws ValidationFailedException
      */
-    public function getPagination(ParameterBag $urlParameters): ?object
+    public function getPagination(ParameterBag $urlParameters): ?OffsetPagination
     {
         if (!$urlParameters->has(UrlParameter::PAGE)) {
             return null;
@@ -45,13 +42,11 @@ class OffsetPaginationParser implements PaginationParserInterface
     }
 
     /**
-     * @param mixed $page
-     *
-     * @return array{offset: non-empty-string, limit: non-empty-string}
+     * @return array{offset: numeric-string, limit: numeric-string}
      *
      * @throws ValidationFailedException
      */
-    protected function getValidatedPage($page): array
+    protected function getValidatedPage(mixed $page): array
     {
         $violations = $this->validator->validate($page, [
             new Assert\NotNull(),

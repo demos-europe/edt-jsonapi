@@ -13,8 +13,6 @@ use function is_array;
 
 class FieldsValidator
 {
-    private ValidatorInterface $validator;
-
     /**
      * @var non-empty-list<Constraint>
      */
@@ -25,9 +23,9 @@ class FieldsValidator
      */
     private array $propertiesConstraints;
 
-    public function __construct(ValidatorInterface $validator)
-    {
-        $this->validator = $validator;
+    public function __construct(
+        private readonly ValidatorInterface $validator
+    ) {
         $this->typeConstraints = [
             new Assert\NotNull(),
             new Assert\Type('array'),
@@ -54,13 +52,11 @@ class FieldsValidator
      *
      * Its values must be a comma-separated list of properties that should exist in that type.
      *
-     * @param mixed $fieldValue
-     *
      * @return array<non-empty-string, string>
      *
      * @throws FieldsException
      */
-    public function validateFormat($fieldValue): array
+    public function validateFormat(mixed $fieldValue): array
     {
         $violations = $this->validator->validate($fieldValue, $this->propertiesConstraints);
         if (is_array($fieldValue)) {
@@ -92,7 +88,7 @@ class FieldsValidator
         }
 
         $requestedProperties = explode(',', $propertiesString);
-        $readableProperties = $type->getReadableProperties();
+        $readableProperties = array_merge(...$type->getReadableProperties());
         $readablePropertyNames = array_keys($readableProperties);
 
         return array_values(array_diff($requestedProperties, $readablePropertyNames));

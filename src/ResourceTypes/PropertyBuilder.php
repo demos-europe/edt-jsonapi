@@ -4,7 +4,14 @@ declare(strict_types=1);
 
 namespace EDT\JsonApi\ResourceTypes;
 
+use EDT\JsonApi\Properties\AbstractConfig;
+use EDT\JsonApi\Properties\AttributeConfig;
+use EDT\JsonApi\Properties\ConfigCollection;
+use EDT\JsonApi\Properties\ResourcePropertyConfigException;
+use EDT\JsonApi\Properties\ToManyRelationshipConfig;
+use EDT\JsonApi\Properties\ToOneRelationshipConfig;
 use EDT\Querying\Contracts\PathException;
+use EDT\Querying\Contracts\PathsBasedInterface;
 use EDT\Querying\Contracts\PropertyPathInterface;
 use EDT\Wrapping\Contracts\Types\CreatableTypeInterface;
 use EDT\Wrapping\Contracts\Types\ExposableRelationshipTypeInterface;
@@ -31,6 +38,8 @@ use Webmozart\Assert\Assert;
  *
  * @template TEntity of object
  * @template TValue
+ *
+ * @deprecated when no more usages of the setter methods of this class remain, it can simply be deleted (no need to preserve documentation)
  */
 class PropertyBuilder
 {
@@ -64,21 +73,19 @@ class PropertyBuilder
     protected bool $requiredForCreation = true;
 
     /**
-     * @var class-string<TEntity>
-     */
-    protected string $entityClass;
-
-    /**
      * @param class-string<TEntity> $entityClass
+     * @param array{relationshipType: ResourceTypeInterface, defaultInclude: bool, toMany: bool}|null $relationship
      *
      * @throws PathException
      */
-    public function __construct(PropertyPathInterface $path, string $entityClass)
-    {
+    public function __construct(
+        PropertyPathInterface $path,
+        protected string $entityClass,
+        private readonly ?array $relationship = null
+    ) {
         $names = $path->getAsNames();
         Assert::count($names, 1);
         $this->name = $names[0];
-        $this->entityClass = $entityClass;
     }
 
     /**
@@ -104,6 +111,8 @@ class PropertyBuilder
      * type.
      *
      * @param PropertyPathInterface $aliasedPath all segments must have a corresponding property in the backing entity
+     *
+     * @deprecated use {@link AbstractConfig::enableAliasing()}
      */
     public function aliasedPath(PropertyPathInterface $aliasedPath): self
     {
@@ -131,6 +140,8 @@ class PropertyBuilder
      * books they have written (assuming the necessary relationship from authors to
      * books is defined and the resources'
      * {@link ExposableRelationshipTypeInterface::isExposedAsRelationship()} returns `true`).
+     *
+     * @deprecated use {@link AbstractConfig::enableFiltering()}
      */
     public function filterable(): self
     {
@@ -154,6 +165,8 @@ class PropertyBuilder
      * author when comparing two `Author` resources.
      *
      * @see https://jsonapi.org/format/#fetching-sorting
+     *
+     * @deprecated use {@link AbstractConfig::enableSorting()}
      */
     public function sortable(): self
     {
@@ -220,6 +233,8 @@ class PropertyBuilder
      * @return $this
      *
      * @see https://jsonapi.org/format/#fetching-sparse-fieldsets JSON:API sparse fieldsets
+     *
+     * @deprecated use {@link AttributeConfig::enableReadability()}/{@link ToOneRelationshipConfig::enableReadability()}/{@link ToManyRelationshipConfig::enableReadability()}
      */
     public function readable(bool $defaultField = false, callable $customRead = null, bool $allowingInconsistencies = false): self
     {
@@ -241,6 +256,8 @@ class PropertyBuilder
      * a resource is created. You can change that by setting the `$optional` parameter to `true`.
      *
      * @return $this
+     *
+     * @deprecated use {@link AbstractConfig::enableInitializability()}
      */
     public function initializable(bool $optional = false): self
     {
@@ -251,29 +268,62 @@ class PropertyBuilder
     }
 
     /**
-     * @return Property<TEntity, TValue>
-     */
-    public function build(): Property
-    {
-        return new Property(
-            $this->name,
-            $this->readable,
-            $this->filterable,
-            $this->sortable,
-            $this->aliasedPath,
-            $this->defaultField,
-            $this->customReadCallback,
-            $this->allowingInconsistencies,
-            $this->initializable,
-            $this->requiredForCreation,
-        );
-    }
-
-    /**
      * @return non-empty-string
      */
     public function getName(): string
     {
         return $this->name;
+    }
+
+    /**
+     * @param ConfigCollection<PathsBasedInterface, PathsBasedInterface, TEntity> $configCollection
+     *
+     * @return void
+     * @throws PathException
+     * @throws ResourcePropertyConfigException
+     */
+    public function addToConfigCollection(ConfigCollection $configCollection): void
+    {
+        if (null === $this->relationship) {
+            $config = $configCollection->configureAttribute($this->name);
+            if ($this->readable) {
+                $config->enableReadability(
+                    $this->defaultField,
+                    $this->customReadCallback,
+                    $this->allowingInconsistencies
+                );
+            }
+        } else {
+            $config = $this->relationship['toMany']
+                ? $configCollection->configureToManyRelationship(
+                    $this->name,
+                    $this->relationship['relationshipType']
+                )
+                : $configCollection->configureToOneRelationship(
+                    $this->name,
+                    $this->relationship['relationshipType']
+                );
+            if ($this->readable) {
+                $config->enableReadability(
+                    $this->defaultField,
+                    $this->relationship['defaultInclude'],
+                    $this->customReadCallback,
+                    $this->allowingInconsistencies
+                );
+            }
+        }
+
+        if (null !== $this->aliasedPath) {
+            $config->enableAliasing($this->aliasedPath);
+        }
+        if ($this->sortable) {
+            $config->enableSorting();
+        }
+        if ($this->filterable) {
+            $config->enableFiltering();
+        }
+        if ($this->initializable) {
+            $config->enableInitializability([], !$this->requiredForCreation);
+        }
     }
 }

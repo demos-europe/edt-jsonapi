@@ -11,16 +11,14 @@ use Symfony\Component\Validator\Constraints as Assert;
 
 class SortValidator
 {
-    private ValidatorInterface $validator;
-
     /**
      * @var non-empty-list<Constraint>
      */
     private array $sortConstraints;
 
-    public function __construct(ValidatorInterface $validator)
-    {
-        $this->validator = $validator;
+    public function __construct(
+        private readonly ValidatorInterface $validator
+    ) {
         $this->sortConstraints = [
             new Assert\NotBlank(null, null, false),
             new Assert\Type('string'),
@@ -29,11 +27,9 @@ class SortValidator
     }
 
     /**
-     * @param mixed $sortValue
-     *
      * @return non-empty-string
      */
-    public function validateFormat($sortValue): string
+    public function validateFormat(mixed $sortValue): string
     {
         $violations = $this->validator->validate($sortValue, $this->sortConstraints);
 

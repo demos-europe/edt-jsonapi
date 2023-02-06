@@ -5,18 +5,15 @@ declare(strict_types=1);
 namespace Tests\data\ApiTypes;
 
 use EDT\JsonApi\ResourceTypes\ResourceTypeInterface;
+use EDT\Wrapping\Properties\AttributeReadability;
+use EDT\Wrapping\Properties\ToOneRelationshipReadability;
 use League\Fractal\TransformerAbstract;
 
 class BookType extends \Tests\data\Types\BookType implements ResourceTypeInterface
 {
-    public static function getName(): string
+    public function getIdentifier(): string
     {
         return self::class;
-    }
-
-    public function getTransformer(): TransformerAbstract
-    {
-        return new class() extends TransformerAbstract {};
     }
 
     /**
@@ -25,9 +22,16 @@ class BookType extends \Tests\data\Types\BookType implements ResourceTypeInterfa
     public function getReadableProperties(): array
     {
         return [
-            'title' => null,
-            'author' => $this->typeProvider->requestType(AuthorType::class)->getInstanceOrThrow(),
-            'tags' => null,
+            [
+                'title' => new AttributeReadability(false, false, null),
+                'tags' => new AttributeReadability(false, false, null),
+            ],
+            [
+                'author' => new ToOneRelationshipReadability(false, false, false, null,
+                    $this->typeProvider->requestType(AuthorType::class)->getInstanceOrThrow(),
+                ),
+            ],
+            [],
         ];
     }
 

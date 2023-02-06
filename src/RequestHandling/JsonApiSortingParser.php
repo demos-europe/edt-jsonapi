@@ -9,27 +9,19 @@ use EDT\Querying\Contracts\PathsBasedInterface;
 use EDT\Querying\Contracts\SortMethodFactoryInterface;
 use EDT\Querying\Contracts\SortMethodInterface;
 use InvalidArgumentException;
-use Safe\Exceptions\StringsException;
 use function in_array;
-use function Safe\substr;
 
 /**
- * @template TSorting of \EDT\Querying\Contracts\PathsBasedInterface
+ * @template TSorting of PathsBasedInterface
  */
 class JsonApiSortingParser
 {
     /**
-     * @var SortMethodFactoryInterface<TSorting>
-     */
-    private SortMethodFactoryInterface $sortMethodFactory;
-
-    /**
      * @param SortMethodFactoryInterface<TSorting> $sortMethodFactory
      */
-    public function __construct(SortMethodFactoryInterface $sortMethodFactory)
-    {
-        $this->sortMethodFactory = $sortMethodFactory;
-    }
+    public function __construct(
+        private readonly SortMethodFactoryInterface $sortMethodFactory
+    ) {}
 
     /**
      * Create an array of {@link SortMethodInterface} objects from the sort query parameter given if not null.
@@ -54,7 +46,6 @@ class JsonApiSortingParser
      * @return TSorting
      *
      * @throws PathException
-     * @throws StringsException
      */
     private function parseSortMethod(string $sortMethodRaw): PathsBasedInterface
     {
@@ -69,7 +60,6 @@ class JsonApiSortingParser
      *
      * @return TSorting
      *
-     * @throws StringsException
      * @throws PathException
      */
     private function parseNegativeDirection(string $sortMethodRaw): PathsBasedInterface

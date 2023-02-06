@@ -10,13 +10,14 @@ use EDT\JsonApi\Schema\RelationshipObject;
 use EDT\JsonApi\Schema\ResourceIdentifierObject;
 use EDT\JsonApi\Schema\ToManyResourceLinkage;
 use EDT\JsonApi\Schema\ToOneResourceLinkage;
+use EDT\Querying\Contracts\PathsBasedInterface;
 use EDT\Wrapping\Contracts\TypeProviderInterface;
 use InvalidArgumentException;
 use function count;
 
 /**
- * @template TCondition of \EDT\Querying\Contracts\PathsBasedInterface
- * @template TSorting of \EDT\Querying\Contracts\PathsBasedInterface
+ * @template TCondition of PathsBasedInterface
+ * @template TSorting of PathsBasedInterface
  *
  * @phpstan-import-type JsonApiRelationship from RelationshipObject
  * @phpstan-import-type JsonApiRelationships from RelationshipObject
@@ -24,24 +25,13 @@ use function count;
 class PropertyValuesGenerator
 {
     /**
-     * @var TypeProviderInterface<TCondition, TSorting>
-     */
-    private TypeProviderInterface $typeProvider;
-
-    /**
-     * @var EntityFetcherInterface<TCondition, TSorting>
-     */
-    private EntityFetcherInterface $entityFetcher;
-
-    /**
      * @param EntityFetcherInterface<TCondition, TSorting> $entityFetcher
-     * @param TypeProviderInterface<TCondition, TSorting>  $typeProvider
+     * @param TypeProviderInterface<TCondition, TSorting> $typeProvider
      */
-    public function __construct(EntityFetcherInterface $entityFetcher, TypeProviderInterface $typeProvider)
-    {
-        $this->typeProvider = $typeProvider;
-        $this->entityFetcher = $entityFetcher;
-    }
+    public function __construct(
+        private readonly EntityFetcherInterface $entityFetcher,
+        private readonly TypeProviderInterface $typeProvider
+    ) {}
 
     /**
      * Converts the attributes and relationships from the JSON:API request format into
@@ -59,6 +49,7 @@ class PropertyValuesGenerator
             $relationships
         );
 
+        // TODO: validate request (especially cardinalities) using type schema
         $relationships = array_map(function (RelationshipObject $relationshipObject) {
             $resourceLinkage = $relationshipObject->getData();
 

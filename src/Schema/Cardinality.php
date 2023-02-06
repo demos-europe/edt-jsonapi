@@ -7,7 +7,7 @@ namespace EDT\JsonApi\Schema;
 /**
  * Represents the cardinality of a relationship. Currently only toOne and toMany are implemented.
  *
- * Note that the creation of multiple equal instances is possible. Eg. multiple instances of 'toOne'
+ * Note that the creation of multiple equal instances is possible. E.g. multiple instances of 'toOne'
  * cardinalities may be created. Ideally for each cardinality at most one instance exists however
  * this is not implemented yet.
  *
@@ -17,17 +17,11 @@ namespace EDT\JsonApi\Schema;
 class Cardinality
 {
     /**
-     * @var non-empty-string
+     * @param 'toOne'|'toMany' $cardinalityType
      */
-    private string $type;
-
-    /**
-     * @param non-empty-string $cardinalityType
-     */
-    private function __construct(string $cardinalityType)
-    {
-        $this->type = $cardinalityType;
-    }
+    private function __construct(
+        private readonly string $cardinalityType
+    ) {}
 
     public static function getToMany(): Cardinality
     {
@@ -41,11 +35,11 @@ class Cardinality
 
     public function isToOne(): bool
     {
-        return 'toOne' === $this->type;
+        return 'toOne' === $this->cardinalityType;
     }
 
     public function isToMany(): bool
     {
-        return 'toMany' === $this->type;
+        return 'toMany' === $this->cardinalityType;
     }
 }

@@ -5,9 +5,12 @@ declare(strict_types=1);
 namespace EDT\JsonApi\ApiDocumentation;
 
 use Closure;
-use EDT\JsonApi\ResourceTypes\AbstractResourceType;
-use EDT\JsonApi\ResourceTypes\PropertyCollection;
+use EDT\JsonApi\ResourceTypes\ResourceTypeInterface;
 use EDT\Parsing\Utilities\DocblockTagParser;
+use EDT\Wrapping\Properties\AbstractReadability;
+use EDT\Wrapping\Properties\AttributeReadability;
+use EDT\Wrapping\Properties\ToManyRelationshipReadability;
+use EDT\Wrapping\Properties\ToOneRelationshipReadability;
 use ReflectionFunctionAbstract;
 use ReflectionMethod;
 use ReflectionProperty;
@@ -15,7 +18,6 @@ use function array_key_exists;
 use Doctrine\Common\Annotations\AnnotationReader;
 use Doctrine\ORM\Mapping\Column;
 use Doctrine\ORM\Mapping\Id;
-use function get_class;
 use ReflectionClass;
 use ReflectionException;
 use ReflectionFunction;
@@ -25,12 +27,14 @@ use Throwable;
 use UnexpectedValueException;
 use function is_array;
 use function is_callable;
+use function is_string;
 use function strlen;
 
 /**
  * Map Doctrine or native types to OpenAPI types.
+ *
+ * TODO: abstract this class away from the doctrine parts and move doctrine parts into separate class in separate package (service or subclass)
  */
-// TODO: determine if this class can be abstracted away from doctrine. If not, decide if it should remain in the jsonapi package
 class AttributeTypeResolver
 {
     /**
@@ -39,14 +43,10 @@ class AttributeTypeResolver
     private array $classReflectionCache = [];
 
     /**
-     * @var array<class-string, PropertyCollection>
-     */
-    private array $propertiesCache = [];
-
-    /**
      * Return a valid `cebe\OpenApi` type declaration.
      *
      * @param non-empty-string $propertyName
+     * @param AttributeReadability|ToOneRelationshipReadability|ToManyRelationshipReadability $propertyReadability
      *
      * @return array{type: string, format?: non-empty-string, description?: string}
      *
@@ -54,20 +54,13 @@ class AttributeTypeResolver
      * @throws Throwable
      */
     public function getPropertyType(
-        AbstractResourceType $resourceType,
-        string $propertyName
+        ResourceTypeInterface $resourceType,
+        string $propertyName,
+        AbstractReadability $propertyReadability
     ): array {
-        $resourceClass = get_class($resourceType);
-        if (!array_key_exists($resourceClass, $this->propertiesCache)) {
-            $this->propertiesCache[$resourceClass] = $resourceType->getPropertyCollection();
-        }
-
-        $resourceProperties = $this->propertiesCache[$resourceClass];
-        if ($resourceProperties->has($propertyName)) {
-            $customReadCallback = $resourceProperties->get($propertyName)->getCustomReadCallback();
-            if (null !== $customReadCallback) {
-                return $this->resolveTypeFromCallable($customReadCallback, $resourceClass, $propertyName);
-            }
+        $customReadCallback = $propertyReadability->getCustomValueFunction();
+        if (null !== $customReadCallback) {
+            return $this->resolveTypeFromCallable($customReadCallback, $resourceType::class, $propertyName);
         }
 
         return $this->resolveTypeFromEntityClass($resourceType->getEntityClass(), $propertyName);
@@ -110,7 +103,7 @@ class AttributeTypeResolver
         }
 
         if ($column instanceof Column) {
-            $dqlTypeMapping = $this->mapDqlType($column->type);
+            $dqlTypeMapping = $this->mapDqlType($column);
             $dqlTypeMapping['description'] = $this->formatDescriptionFromDocblock($propertyReflection);
 
             return $dqlTypeMapping;
@@ -126,32 +119,26 @@ class AttributeTypeResolver
     {
         $nativeType = $reflectionType->getName();
 
-        switch ($nativeType) {
-            case 'int':
-                $type = 'number';
-                break;
-
-            case 'array':
-                /*
-                 * Arrays can be either arrays or hashmaps in PHP. This is currently not properly
-                 * handled and all arrays are assumed to be just arrays.
-                 *
-                 * @improve T24976
-                 */
-
-            default:
-                $type = $nativeType;
-        }
-
-        return $type;
+        return match ($nativeType) {
+            'int' => 'number',
+            /*
+             * Arrays can be either arrays or hashmaps in PHP. This is currently not properly
+             * handled and all arrays are assumed to be just arrays.
+             *
+             * TODO @improve T24976
+             */
+            //'array' => $nativeType,
+            default => $nativeType,
+        };
     }
 
     /**
      * @return array{type: non-empty-string, format?: non-empty-string}
      */
-    private function mapDqlType(string $dqlType): array
+    private function mapDqlType(Column $column): array
     {
         $format = null;
+        $dqlType = $column->type;
 
         switch ($dqlType) {
             case 'string':
@@ -174,7 +161,7 @@ class AttributeTypeResolver
                 break;
 
             default:
-                $type = 'unknown: '.$dqlType;
+                $type = 'unknown: '.(is_string($dqlType) ? $dqlType : 'non-string');
         }
 
         $result = ['type' => $type];
@@ -186,22 +173,22 @@ class AttributeTypeResolver
     }
 
     /**
-     * @param array{0: object, 1: string}|callable|Closure $customReadCallback
+     * @param callable(object): (simple_primitive|array<int|string, mixed>|null|object|iterable<object>) $customReadCallback
      *
      * @return array{type: string}
      *
      * @throws ReflectionException
      */
     private function resolveTypeFromCallable(
-        $customReadCallback,
+        callable $customReadCallback,
         string $resourceClass,
         string $propertyName
     ): array {
         try {
-            $functionReflection = $this->reflectCustomReadCallback($customReadCallback);
-        } catch (Throwable $e) {
+            $functionReflection = $this->reflectCustomValueFunction($customReadCallback);
+        } catch (Throwable $exception) {
             // This catch purely exists to have a convenient breakpoint if an unhandled variant of callables appears
-            throw $e;
+            throw $exception;
         }
 
         if (!$functionReflection->hasReturnType()) {
@@ -222,13 +209,13 @@ class AttributeTypeResolver
     }
 
     /**
-     * @param array{0: object, 1: string}|callable|Closure $customReadCallback
+     * @param callable(object): (simple_primitive|array<int|string, mixed>|null|object|iterable<object>) $customReadCallback
      *
      * @return ReflectionMethod|ReflectionFunction
      *
      * @throws ReflectionException
      */
-    private function reflectCustomReadCallback($customReadCallback): ReflectionFunctionAbstract
+    private function reflectCustomValueFunction(callable $customReadCallback): ReflectionFunctionAbstract
     {
         if (is_array($customReadCallback)) {
             return (new ReflectionClass($customReadCallback[0]))->getMethod(
@@ -236,11 +223,11 @@ class AttributeTypeResolver
             );
         }
 
-        if (is_callable($customReadCallback)) {
-            $customReadCallback = Closure::fromCallable($customReadCallback);
+        if (is_string($customReadCallback)) {
+            return new ReflectionFunction($customReadCallback);
         }
 
-        return new ReflectionFunction($customReadCallback);
+        return new ReflectionFunction($customReadCallback(...));
     }
 
     /**

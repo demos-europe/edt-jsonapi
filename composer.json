@@ -4,12 +4,12 @@
     "license": "MIT",
     "type": "library",
     "require": {
-        "php": "^7.4 || ^8.0",
-        "demos-europe/edt-queries": "^0.17",
+        "php": "^8.1",
+        "demos-europe/edt-queries": "^0.18",
         "league/fractal": "^0.19",
         "psr/log": "^1.1.4",
         "doctrine/collections": "^1.5",
-        "demos-europe/edt-access-definitions": "^0.17",
+        "demos-europe/edt-access-definitions": "^0.18",
         "symfony/http-foundation": "^5.3.7,<6",
         "symfony/validator": "5.*.*",
         "pagerfanta/pagerfanta": "^2.7",
@@ -37,8 +37,8 @@
         }
     },
     "conflict": {
-        "demos-europe/edt-extra": "<0.16.1",
-        "demos-europe/edt-paths": "<0.16.1",
-        "demos-europe/edt-dql": "<0.16.1"
+        "demos-europe/edt-extra": "<0.17.1",
+        "demos-europe/edt-paths": "<0.17.1",
+        "demos-europe/edt-dql": "<0.17.1"
     }
 }
