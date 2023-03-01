@@ -226,9 +226,9 @@ class PropertyBuilder
      * and the value stored in the property will be used when filtering or sorting. The interaction
      * with aliases is undefined.
      *
-     * @param bool                                     $defaultField            the field is to be returned in responses by default
-     * @param null|callable(TEntity, ParamBag): TValue $customRead              to be set if this property needs special handling when read
-     * @param bool                                     $allowingInconsistencies sanity checks will be disabled
+     * @param bool $defaultField the field is to be returned in responses by default
+     * @param null|callable(TEntity, ParamBag): TValue $customReadCallback to be set if this property needs special handling when read
+     * @param bool $allowingInconsistencies sanity checks will be disabled
      *
      * @return $this
      *
@@ -236,11 +236,11 @@ class PropertyBuilder
      *
      * @deprecated use {@link AttributeConfig::enableReadability()}/{@link ToOneRelationshipConfig::enableReadability()}/{@link ToManyRelationshipConfig::enableReadability()}
      */
-    public function readable(bool $defaultField = false, callable $customRead = null, bool $allowingInconsistencies = false): self
+    public function readable(bool $defaultField = false, callable $customReadCallback = null, bool $allowingInconsistencies = false): self
     {
         $this->readable = true;
         $this->defaultField = $defaultField;
-        $this->customReadCallback = $customRead;
+        $this->customReadCallback = $customReadCallback;
         $this->allowingInconsistencies = $allowingInconsistencies;
 
         return $this;
@@ -285,7 +285,7 @@ class PropertyBuilder
     public function addToConfigCollection(ConfigCollection $configCollection): void
     {
         if (null === $this->relationship) {
-            $config = $configCollection->configureAttribute($this->name);
+            $config = $configCollection->configureJsonAttribute($this->name);
             if ($this->readable) {
                 $config->enableReadability(
                     $this->defaultField,
