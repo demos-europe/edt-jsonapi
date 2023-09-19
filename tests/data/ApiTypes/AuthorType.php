@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace Tests\data\ApiTypes;
 
-use EDT\JsonApi\Properties\Attributes\PathAttributeReadability;
-use EDT\JsonApi\Properties\Id\PathIdReadability;
-use EDT\JsonApi\Properties\Relationships\PathToManyRelationshipReadability;
 use EDT\JsonApi\ResourceTypes\ResourceTypeInterface;
-use EDT\Wrapping\Properties\ReadabilityCollection;
+use EDT\Wrapping\PropertyBehavior\Attribute\PathAttributeReadability;
+use EDT\Wrapping\PropertyBehavior\Identifier\PathIdentifierReadability;
+use EDT\Wrapping\PropertyBehavior\Relationship\ToMany\PathToManyRelationshipReadability;
+use EDT\Wrapping\ResourceBehavior\ResourceReadability;
 use League\Fractal\TransformerAbstract;
 
 class AuthorType extends \Tests\data\Types\AuthorType implements ResourceTypeInterface
@@ -21,9 +21,9 @@ class AuthorType extends \Tests\data\Types\AuthorType implements ResourceTypeInt
     /**
      * Overwrites its parent relationships with reference to resource type implementations.
      */
-    public function getReadableProperties(): ReadabilityCollection
+    public function getReadability(): ResourceReadability
     {
-        return new ReadabilityCollection(
+        return new ResourceReadability(
             [
                 'name' => new PathAttributeReadability(
                     $this->getEntityClass(),
@@ -55,11 +55,10 @@ class AuthorType extends \Tests\data\Types\AuthorType implements ResourceTypeInt
                     false,
                     false,
                     $this->typeProvider->getTypeByIdentifier(BookType::class),
-                    $this->propertyAccessor,
-                    $this->entityVerifier
+                    $this->propertyAccessor
                 ),
             ],
-            new PathIdReadability(
+            new PathIdentifierReadability(
                 $this->getEntityClass(),
                 ['id'],
                 $this->propertyAccessor,

@@ -9,12 +9,12 @@ use EDT\JsonApi\RequestHandling\Body\UpdateRequestBody;
 use EDT\JsonApi\Requests\RequestException;
 use EDT\JsonApi\Validation\Patterns;
 use EDT\Querying\Contracts\PathsBasedInterface;
+use EDT\Wrapping\Contracts\ContentField;
 use EDT\Wrapping\Contracts\TypeProviderInterface;
 use JsonException;
 use Symfony\Component\HttpFoundation\ParameterBag;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
-use Symfony\Component\Validator\Constraint;
 use Symfony\Component\Validator\Constraints as Assert;
 use Symfony\Component\Validator\Exception\ValidationFailedException;
 use Symfony\Component\Validator\Validator\ValidatorInterface;
@@ -31,7 +31,8 @@ class RequestTransformer
     public function __construct(
         protected readonly RequestStack $requestStack,
         protected readonly TypeProviderInterface $typeProvider,
-        protected readonly ValidatorInterface $validator
+        protected readonly ValidatorInterface $validator,
+        protected readonly RequestConstraintFactory $requestConstraintFactory
     ) {}
 
     public function getUrlParameters(): ParameterBag
@@ -186,7 +187,7 @@ class RequestTransformer
         ?string $urlId,
         ExpectedPropertyCollection $expectedProperties
     ): void {
-        $constraints = $this->getBodyConstraints($urlTypeIdentifier, $urlId, $expectedProperties);
+        $constraints = $this->requestConstraintFactory->getBodyConstraints($urlTypeIdentifier, $urlId, $expectedProperties);
         $violations = $this->validator->validate($body, $constraints);
 
         if (0 !== $violations->count()) {
@@ -239,96 +240,5 @@ class RequestTransformer
         } catch (JsonException $exception) {
             throw RequestException::requestBody($content, $exception);
         }
-    }
-
-
-    /**
-     * @param non-empty-string $urlTypeIdentifier
-     * @param non-empty-string|null $urlId
-     *
-     * @return list<Constraint>
-     */
-    protected function getBodyConstraints(
-        string $urlTypeIdentifier,
-        ?string $urlId,
-        ExpectedPropertyCollection $expectedProperties
-    ): array {
-        return [
-            new Assert\Collection(
-                [
-                    ContentField::DATA => [
-                        // validate attributes and relationships
-                        new Assert\Collection(
-                            [
-                                ContentField::ATTRIBUTES    => [
-                                    // validate required attributes are present
-                                    new Assert\Collection(
-                                        $expectedProperties->getRequiredAttributes(),
-                                        null,
-                                        null,
-                                        true,
-                                        false
-                                    ),
-                                    // validate request attributes are allowed and valid
-                                    new Assert\Collection(
-                                        $expectedProperties->getAllowedAttributes(),
-                                        null,
-                                        null,
-                                        false,
-                                        true
-                                    ),
-                                ],
-                                ContentField::RELATIONSHIPS => [
-                                    // validate required relationships are present
-                                    new Assert\Collection(
-                                        $expectedProperties->getRequiredRelationships(),
-                                        null,
-                                        null,
-                                        true,
-                                        false
-                                    ),
-                                    // validate request relationships are allowed and valid
-                                    new Assert\Collection(
-                                        $expectedProperties->getAllowedRelationships(),
-                                        null,
-                                        null,
-                                        false,
-                                        true
-                                    ),
-                                ],
-                            ],
-                            null,
-                            null,
-                            false,
-                            true
-                        ),
-                        // validate `type` field
-                        new Assert\Collection(
-                            [
-                                ContentField::TYPE => $this->getTypeIdentifierConstraints($urlTypeIdentifier),
-                            ],
-                            null,
-                            null,
-                            true,
-                            false
-                        ),
-                        // validate `id` field (only required if an ID was given in the request)
-                        new Assert\Collection(
-                            [
-                                ContentField::ID => $this->getIdConstraints($urlId),
-                            ],
-                            null,
-                            null,
-                            true,
-                            null === $urlId
-                        ),
-                    ],
-                ],
-                null,
-                null,
-                false,
-                false
-            ),
-        ];
     }
 }

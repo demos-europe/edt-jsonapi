@@ -4,17 +4,19 @@ declare(strict_types=1);
 
 namespace EDT\JsonApi\RequestHandling\Body;
 
-class CreationRequestBody extends RequestBody
+use EDT\Wrapping\CreationDataInterface;
+
+class CreationRequestBody extends RequestBody implements CreationDataInterface
 {
     /**
-     * @param non-empty-string|null $id
+     * @param non-empty-string|null $entityId
      * @param non-empty-string $type
      * @param array<non-empty-string, mixed> $attributes
      * @param array<non-empty-string, JsonApiRelationship|null> $toOneRelationships
      * @param array<non-empty-string, list<JsonApiRelationship>> $toManyRelationships
      */
     public function __construct(
-        protected readonly ?string $id,
+        protected readonly ?string $entityId,
         string $type,
         array $attributes,
         array $toOneRelationships,
@@ -23,11 +25,8 @@ class CreationRequestBody extends RequestBody
         parent::__construct($type, $attributes, $toOneRelationships, $toManyRelationships);
     }
 
-    /**
-     * @return non-empty-string|null
-     */
-    public function getId(): ?string
+    public function getEntityIdentifier(): ?string
     {
-        return $this->id;
+        return $this->entityId;
     }
 }
