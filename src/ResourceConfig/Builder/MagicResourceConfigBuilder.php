@@ -9,7 +9,6 @@ use EDT\JsonApi\PropertyConfig\Builder\IdentifierConfigBuilderInterface;
 use EDT\JsonApi\PropertyConfig\Builder\ToManyRelationshipConfigBuilderInterface;
 use EDT\JsonApi\PropertyConfig\Builder\ToOneRelationshipConfigBuilderInterface;
 use EDT\JsonApi\Utilities\PropertyBuilderFactory;
-use EDT\JsonApi\Utilities\ResourceTypeByClassProviderInterface;
 use EDT\Parsing\Utilities\ClassOrInterfaceType;
 use EDT\Parsing\Utilities\TypeInterface;
 use EDT\PathBuilding\DocblockPropertyByTraitEvaluator;
@@ -20,6 +19,11 @@ use EDT\Wrapping\Contracts\ContentField;
 use InvalidArgumentException;
 use Webmozart\Assert\Assert;
 use function array_key_exists;
+
+
+// FIXME: unsure that if a property-read is extended with a different type that this type is used, not the one in the parent class,
+// this is needed to support the use case that an entity has a to-one relationship to an email address, but the frontend should receive
+// the email address as string attribute with the same attribute name as the relationship in the entity
 
 /**
  * Expects subclasses to define attributes and relationships as `property-read` docblock tags.
@@ -45,12 +49,10 @@ abstract class MagicResourceConfigBuilder extends AbstractResourceConfigBuilder
     /**
      * @param class-string<TEntity> $entityClass
      * @param PropertyBuilderFactory<TCondition, TSorting> $propertyBuilderFactory
-     * @param ResourceTypeByClassProviderInterface<TCondition, TSorting> $typeProvider must provide
      */
     public function __construct(
         string $entityClass,
         protected readonly PropertyBuilderFactory $propertyBuilderFactory,
-        protected readonly ResourceTypeByClassProviderInterface $typeProvider
     ) {
         $parsedProperties = $this->getDocblockTraitEvaluator()->parseProperties(static::class, true);
         Assert::keyExists($parsedProperties, ContentField::ID);
