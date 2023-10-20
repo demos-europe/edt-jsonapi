@@ -19,7 +19,6 @@ use EDT\Wrapping\PropertyBehavior\Relationship\ToOne\Factory\PathToOneRelationsh
 use EDT\Wrapping\PropertyBehavior\Relationship\ToOne\Factory\ToOneRelationshipConstructorBehaviorFactory;
 use EDT\Wrapping\PropertyBehavior\Relationship\ToOne\PathToOneRelationshipReadability;
 use EDT\Wrapping\PropertyBehavior\Relationship\ToOne\ToOneRelationshipReadabilityInterface;
-use InvalidArgumentException;
 
 /**
  * @template TCondition of PathsBasedInterface
@@ -27,7 +26,7 @@ use InvalidArgumentException;
  * @template TEntity of object
  * @template TRelationship of object
  *
- * @template-extends RelationshipConfigBuilder<TCondition, TSorting, TRelationship>
+ * @template-extends RelationshipConfigBuilder<TCondition, TSorting, TEntity, TRelationship>
  * @template-implements ToOneRelationshipConfigBuilderInterface<TCondition, TSorting, TEntity, TRelationship>
  * @template-implements BuildableInterface<ToOneRelationshipConfigInterface<TCondition, TSorting, TEntity, TRelationship>>
  */
@@ -35,21 +34,6 @@ class ToOneRelationshipConfigBuilder
     extends RelationshipConfigBuilder
     implements ToOneRelationshipConfigBuilderInterface, BuildableInterface
 {
-    /**
-     * @var list<RelationshipSetBehaviorFactoryInterface<TCondition, TSorting, TEntity, TRelationship>>
-     */
-    protected array $updateBehaviorFactories = [];
-
-    /**
-     * @var list<RelationshipConstructorBehaviorFactoryInterface<TCondition>>
-     */
-    protected array $constructorBehaviorFactories = [];
-
-    /**
-     * @var list<RelationshipSetBehaviorFactoryInterface<TCondition, TSorting, TEntity, TRelationship>>
-     */
-    protected array $postConstructorBehaviorFactories = [];
-
     /**
      * @var null|callable(non-empty-string, non-empty-list<non-empty-string>, class-string<TEntity>, ResourceTypeInterface<TCondition, TSorting, TRelationship>): ToOneRelationshipReadabilityInterface<TCondition, TSorting, TEntity, TRelationship>
      */
@@ -61,12 +45,12 @@ class ToOneRelationshipConfigBuilder
      * @param non-empty-string $name
      */
     public function __construct(
-        protected readonly string $entityClass,
+        string $entityClass,
         protected readonly string $relationshipClass,
         protected readonly PropertyAccessorInterface $propertyAccessor,
         string $name
     ) {
-        parent::__construct($name);
+        parent::__construct($entityClass, $name);
     }
 
     /**
@@ -171,45 +155,17 @@ class ToOneRelationshipConfigBuilder
 
     public function build(): ToOneRelationshipConfigInterface
     {
-        if (null === $this->relationshipType) {
-            throw new InvalidArgumentException('The relationship type must be set before a config can be build.');
-        }
-
-        $postConstructorBehaviors = array_map(fn (
-            RelationshipSetBehaviorFactoryInterface $factory
-        ): RelationshipSetBehaviorInterface => $factory->createSetBehavior(
-            $this->name,
-            $this->getPropertyPath(),
-            $this->entityClass,
-            $this->relationshipType
-        ), $this->postConstructorBehaviorFactories);
-
-        $constructorBehaviors = array_map(fn (
-            RelationshipConstructorBehaviorFactoryInterface $factory
-        ): ConstructorBehaviorInterface => $factory->createRelationshipConstructorBehavior(
-            $this->name,
-            $this->getPropertyPath(),
-            $this->entityClass,
-            $this->relationshipType
-        ), $this->constructorBehaviorFactories);
-
-        $updateBehaviors = array_map(fn (
-            RelationshipSetBehaviorFactoryInterface $factory
-        ): RelationshipSetBehaviorInterface => $factory->createSetBehavior(
-            $this->name,
-            $this->getPropertyPath(),
-            $this->entityClass,
-            $this->relationshipType
-        ), $this->updateBehaviorFactories);
-
+        $postConstructorBehaviors = $this->getPostConstructorBehaviors();
+        $constructorBehaviors = $this->getConstructorBehaviors();
+        $updateBehaviors = $this->getUpdateBehaviors();
 
         return new DtoToOneRelationshipConfig(
-            ($this->readabilityFactory ?? static fn () => null)($this->name, $this->getPropertyPath(), $this->entityClass, $this->relationshipType),
+            ($this->readabilityFactory ?? static fn () => null)($this->name, $this->getPropertyPath(), $this->entityClass, $this->getFinalRelationshipType()),
             $updateBehaviors,
             $postConstructorBehaviors,
             $constructorBehaviors,
-            $this->getFilterLink($this->relationshipType),
-            $this->getSortLink($this->relationshipType)
+            $this->getFilterLink($this->getFinalRelationshipType()),
+            $this->getSortLink($this->getFinalRelationshipType())
         );
     }
 

@@ -12,6 +12,10 @@ use EDT\Querying\PropertyPaths\NonRelationshipLink;
 use EDT\Wrapping\Contracts\ContentField;
 use EDT\Wrapping\PropertyBehavior\ConstructorBehaviorInterface;
 use EDT\Wrapping\PropertyBehavior\Identifier\CallbackIdentifierReadability;
+use EDT\Wrapping\PropertyBehavior\Identifier\Factory\DataProvidedIdentifierConstructorBehaviorFactory;
+use EDT\Wrapping\PropertyBehavior\Identifier\Factory\IdentifierConstructorBehaviorFactoryInterface;
+use EDT\Wrapping\PropertyBehavior\Identifier\Factory\IdentifierPostConstructorBehaviorFactoryInterface;
+use EDT\Wrapping\PropertyBehavior\Identifier\Factory\PathIdentifierPostConstructorBehaviorFactory;
 use EDT\Wrapping\PropertyBehavior\Identifier\IdentifierReadabilityInterface;
 use EDT\Wrapping\PropertyBehavior\Identifier\IdentifierPostConstructorBehaviorInterface;
 use EDT\Wrapping\PropertyBehavior\Identifier\PathIdentifierReadability;
@@ -29,12 +33,12 @@ class IdentifierConfigBuilder extends AbstractPropertyConfigBuilder implements I
     protected $readabilityFactory;
 
     /**
-     * @var list<callable(non-empty-list<non-empty-string>, class-string<TEntity>): IdentifierPostConstructorBehaviorInterface<TEntity>>
+     * @var list<IdentifierPostConstructorBehaviorFactoryInterface<TEntity>>
      */
     protected array $postConstructorBehaviorFactories = [];
 
     /**
-     * @var list<callable(non-empty-list<non-empty-string>, class-string<TEntity>): ConstructorBehaviorInterface>
+     * @var list<IdentifierConstructorBehaviorFactoryInterface<TEntity>>
      */
     protected array $constructorBehaviorFactories = [];
 
@@ -99,12 +103,22 @@ class IdentifierConfigBuilder extends AbstractPropertyConfigBuilder implements I
     public function build(): IdentifierConfigInterface
     {
         $postConstructorBehaviors = array_map(
-            fn(callable $factory): IdentifierPostConstructorBehaviorInterface => $factory($this->getPropertyPath(), $this->entityClass),
+            fn(
+                IdentifierPostConstructorBehaviorFactoryInterface $factory
+            ): IdentifierPostConstructorBehaviorInterface => $factory->createIdentifierPostConstructorBehavior(
+                $this->getPropertyPath(),
+                $this->entityClass
+            ),
             $this->postConstructorBehaviorFactories
         );
 
         $constructorBehaviors = array_map(
-            fn(callable $factory): ConstructorBehaviorInterface => $factory($this->getPropertyPath(), $this->entityClass),
+            fn(
+                IdentifierConstructorBehaviorFactoryInterface $factory
+            ): ConstructorBehaviorInterface => $factory->createIdentifierConstructorBehavior(
+                $this->getPropertyPath(),
+                $this->entityClass
+            ),
             $this->constructorBehaviorFactories
         );
 
@@ -115,5 +129,40 @@ class IdentifierConfigBuilder extends AbstractPropertyConfigBuilder implements I
             $this->filterable ? new NonRelationshipLink($this->getPropertyPath()) : null,
             $this->sortable ? new NonRelationshipLink($this->getPropertyPath()) : null
         );
+    }
+
+    /**
+     * @return $this
+     */
+    public function addConstructorBehavior(IdentifierConstructorBehaviorFactoryInterface $behaviorFactory): IdentifierConfigBuilderInterface
+    {
+        $this->constructorBehaviorFactories[] = $behaviorFactory;
+
+        return $this;
+    }
+
+    /**
+     * @return $this
+     */
+    public function addPostConstructorBehavior(IdentifierPostConstructorBehaviorFactoryInterface $behaviorFactory): IdentifierConfigBuilderInterface
+    {
+        $this->postConstructorBehaviorFactories[] = $behaviorFactory;
+
+        return $this;
+    }
+
+    public function creatable(bool $optionalAfterConstructor = false, bool $constructorArgument = false, ?string $customConstructorArgumentName = null): IdentifierConfigBuilderInterface
+    {
+        if ($constructorArgument) {
+            $this->addConstructorBehavior(
+                new DataProvidedIdentifierConstructorBehaviorFactory($customConstructorArgumentName)
+            );
+        }
+
+        $this->addPostConstructorBehavior(
+            new PathIdentifierPostConstructorBehaviorFactory($optionalAfterConstructor, $this->propertyAccessor)
+        );
+
+        return $this;
     }
 }
