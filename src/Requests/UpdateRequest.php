@@ -6,26 +6,45 @@ namespace EDT\JsonApi\Requests;
 
 use EDT\JsonApi\Event\AfterUpdateEvent;
 use EDT\JsonApi\Event\BeforeUpdateEvent;
-use EDT\JsonApi\RequestHandling\RequestTransformer;
+use EDT\JsonApi\RequestHandling\Body\UpdateRequestBody;
+use EDT\JsonApi\RequestHandling\ExpectedPropertyCollectionInterface;
+use EDT\JsonApi\RequestHandling\RequestConstraintFactory;
+use EDT\JsonApi\RequestHandling\RequestWithBody;
 use EDT\JsonApi\ResourceTypes\UpdatableTypeInterface;
 use EDT\Querying\Contracts\PathsBasedInterface;
+use EDT\Wrapping\Contracts\ContentField;
 use EDT\Wrapping\PropertyBehavior\EntityVerificationTrait;
 use Exception;
 use League\Fractal\Resource\Item;
 use Psr\EventDispatcher\EventDispatcherInterface;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\Validator\Validator\ValidatorInterface;
 
 /**
  * @template TCondition of PathsBasedInterface
  * @template TSorting of PathsBasedInterface
  */
-class UpdateRequest
+class UpdateRequest extends RequestWithBody
 {
     use EntityVerificationTrait;
 
+    /**
+     * @param int<1, 8192> $maxBodyNestingDepth see {@link RequestWithBody::getRequestBody}
+     */
     public function __construct(
-        protected readonly RequestTransformer $requestTransformer,
-        protected readonly EventDispatcherInterface $eventDispatcher
-    ) {}
+        protected readonly EventDispatcherInterface $eventDispatcher,
+        Request $request,
+        ValidatorInterface $validator,
+        RequestConstraintFactory $requestConstraintFactory,
+        int $maxBodyNestingDepth
+    ) {
+        parent::__construct(
+            $validator,
+            $requestConstraintFactory,
+            $request,
+            $maxBodyNestingDepth
+        );
+    }
 
     /**
      * @param UpdatableTypeInterface<TCondition, TSorting, object> $type
@@ -39,8 +58,7 @@ class UpdateRequest
         $expectedProperties = $type->getExpectedUpdateProperties();
 
         // get request data
-        $requestBody = $this->requestTransformer->getUpdateRequestBody($typeName, $resourceId, $expectedProperties);
-        $urlParams = $this->requestTransformer->getUrlParameters();
+        $requestBody = $this->getUpdateRequestBody($typeName, $resourceId, $expectedProperties);
 
         $beforeUpdateEvent = new BeforeUpdateEvent($type, $requestBody);
         $this->eventDispatcher->dispatch($beforeUpdateEvent);
@@ -63,5 +81,31 @@ class UpdateRequest
         }
 
         return new Item($entity, $type->getTransformer(), $type->getTypeName());
+    }
+
+    /**
+     * @param non-empty-string $urlTypeIdentifier
+     * @param non-empty-string $urlId
+     */
+    protected function getUpdateRequestBody(
+        string $urlTypeIdentifier,
+        string $urlId,
+        ExpectedPropertyCollectionInterface $expectedProperties
+    ): UpdateRequestBody {
+        $body = $this->getRequestData(
+            $urlTypeIdentifier,
+            $urlId,
+            $expectedProperties
+        );
+        $relationships = $body[ContentField::RELATIONSHIPS] ?? [];
+        [$toOneRelationships, $toManyRelationships] = $this->splitRelationships($relationships);
+
+        return new UpdateRequestBody(
+            $urlId,
+            $body[ContentField::TYPE],
+            $body[ContentField::ATTRIBUTES] ?? [],
+            $toOneRelationships,
+            $toManyRelationships
+        );
     }
 }

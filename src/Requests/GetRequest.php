@@ -6,7 +6,6 @@ namespace EDT\JsonApi\Requests;
 
 use EDT\JsonApi\Event\AfterGetEvent;
 use EDT\JsonApi\Event\BeforeGetEvent;
-use EDT\JsonApi\RequestHandling\RequestTransformer;
 use EDT\JsonApi\ResourceTypes\GetableTypeInterface;
 use EDT\Querying\Contracts\PathsBasedInterface;
 use Exception;
@@ -22,7 +21,6 @@ use Psr\EventDispatcher\EventDispatcherInterface;
 class GetRequest
 {
     public function __construct(
-        protected readonly RequestTransformer $requestParser,
         protected readonly EventDispatcherInterface $eventDispatcher
     ) {}
 
@@ -34,8 +32,6 @@ class GetRequest
      */
     public function getResource(GetableTypeInterface $type, string $resourceId): Item
     {
-        $urlParams = $this->requestParser->getUrlParameters();
-
         $beforeGetEvent = new BeforeGetEvent($type);
         $this->eventDispatcher->dispatch($beforeGetEvent);
 
