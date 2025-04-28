@@ -9,7 +9,6 @@ use EDT\JsonApi\OutputHandling\ResponseFactory;
 use EDT\JsonApi\RequestHandling\RequestConstraintFactory;
 use EDT\JsonApi\RequestHandling\RequestWithBody;
 use EDT\JsonApi\ResourceTypes\CreatableTypeInterface;
-use EDT\Querying\Contracts\PathsBasedInterface;
 use EDT\Wrapping\Contracts\Types\PropertyReadableTypeInterface;
 use Exception;
 use League\Fractal\Resource\Item;
@@ -19,8 +18,7 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Validator\Validator\ValidatorInterface;
 
 /**
- * @template TCondition of PathsBasedInterface
- * @template TSorting of PathsBasedInterface
+ * Instances can be used to create a JSON:API specification compliant HTTP response to a given HTTP request, based on the configuration given in the constructor.
  */
 class CreationProcessor
 {
@@ -28,9 +26,11 @@ class CreationProcessor
     use ProcessorTrait;
 
     /**
-     * @param array<non-empty-string, CreatableTypeInterface<TCondition, TSorting, object>&PropertyReadableTypeInterface<TCondition, TSorting, object>> $creatableTypes
-     * @param non-empty-string $resourceTypeAttribute
-     * @param non-empty-string $resourceIdAttribute
+     * Instead of creating instances if this class manually, you may want to use {@link Manager::createCreationProcessor()}.
+     *
+     * @param array<non-empty-string, CreatableTypeInterface<object>&PropertyReadableTypeInterface<object>> $creatableTypes the types for which resource creation is supported by this instance
+     * @param non-empty-string $resourceTypeAttribute the key to use when fetching the resource type name from the request's attributes
+     * @param non-empty-string $resourceIdAttribute the key to use when fetching the resource ID from the request's attributes
      * @param int<1,8192> $maxBodyNestingDepth see {@link RequestWithBody::getRequestBody()}
      */
     public function __construct(
@@ -44,6 +44,15 @@ class CreationProcessor
         protected readonly int $maxBodyNestingDepth
     ) {}
 
+    /**
+     * Create an HTTP response for the given request.
+     *
+     * @param Request $request The request to create a resource for, must comply to the JSON:API specification.
+     *
+     * @return Response an HTTP response corresponding to the given creation request, will be an empty response (no body) if the resource was created exactly as requested
+     *
+     * @throws Exception
+     */
     public function createResponse(Request $request): Response
     {
         [$typeName, $type] = $this->getType($request, $this->creatableTypes, $this->resourceTypeAttribute);
@@ -55,7 +64,7 @@ class CreationProcessor
     }
 
     /**
-     * @param CreatableTypeInterface<TCondition, TSorting, object> $type
+     * @param CreatableTypeInterface<object> $type
      *
      * @throws Exception
      */

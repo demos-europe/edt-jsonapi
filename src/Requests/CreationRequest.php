@@ -11,7 +11,6 @@ use EDT\JsonApi\RequestHandling\ExpectedPropertyCollectionInterface;
 use EDT\JsonApi\RequestHandling\RequestConstraintFactory;
 use EDT\JsonApi\RequestHandling\RequestWithBody;
 use EDT\JsonApi\ResourceTypes\CreatableTypeInterface;
-use EDT\Querying\Contracts\PathsBasedInterface;
 use EDT\Wrapping\Contracts\ContentField;
 use Exception;
 use League\Fractal\Resource\Item;
@@ -19,10 +18,6 @@ use Psr\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Validator\Validator\ValidatorInterface;
 
-/**
- * @template TCondition of PathsBasedInterface
- * @template TSorting of PathsBasedInterface
- */
 class CreationRequest extends RequestWithBody
 {
     /**
@@ -50,9 +45,9 @@ class CreationRequest extends RequestWithBody
      * This may conflict with the assumption, that the {@link Item} always contains the attributes and relationships,
      * that were created differently than requested by the client.
      *
-     * TODO: test if the statement above is compatible with the specification and actually true regarding the libraries behavior
+     * TODO (#139): test if the statement above is compatible with the specification and actually true regarding the libraries behavior
      *
-     * @param CreatableTypeInterface<TCondition, TSorting, object> $type
+     * @param CreatableTypeInterface<object> $type
      *
      * @throws Exception
      */
@@ -89,7 +84,6 @@ class CreationRequest extends RequestWithBody
     /**
      * @param non-empty-string $urlTypeIdentifier
      *
-     * @return CreationRequestBody
      * @throws RequestException
      */
     protected function getCreationRequestBody(
